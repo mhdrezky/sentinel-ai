@@ -1,0 +1,17 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+
+# Local policy override — .sentinel.toml.example is the tracked template
+.sentinel.toml

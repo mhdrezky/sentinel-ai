@@ -1,0 +1,54 @@
+[project]
+name = "sentinel-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = 'PACCOM\rezky', email = "rezky@pacificcomponents.com.au" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.13.4",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+sentinel-ai = "sentinel_ai:main"
+
+[build-system]
+requires = ["uv_build>=0.11.21,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 90
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF"]
+ignore = [
+    # Findings embed attacker-controlled text; long f-strings are clearer
+    # than the alternatives here.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into private helpers deliberately.
+"tests/*" = ["SLF001"]
+# The reference lists are whitespace-separated on purpose: a list literal
+# would triple the line count and make them harder to maintain.
+"src/sentinel_ai/data/popular_packages.py" = ["SIM905"]
+# The transliteration table must contain the ambiguous characters it maps.
+"src/sentinel_ai/reporting.py" = ["RUF001"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.21.0",
+    "pytest>=9.1.1",
+    "pytest-httpx>=0.36.2",
+    "ruff>=0.16.1",
+]

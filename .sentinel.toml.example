@@ -1,0 +1,52 @@
+# Sentinel-AI policy. Copy to `.sentinel.toml` in the repository you want to
+# protect and commit it — the policy should be reviewed like any other code.
+#
+# Every value below is the built-in default, so an empty file behaves the same
+# as no file at all. Environment variables (SENTINEL_*) override this file.
+
+[policy]
+# Severity floor that fails a commit: "low" | "medium" | "high" | "critical".
+block_at_or_above = "high"
+
+# Block a newly added package that runs code at install time. This is the
+# single highest-value rule; turn it off only with a good reason.
+block_on_install_scripts = true
+
+# Block dependencies pulled from git/http/file instead of the registry.
+block_on_nonregistry_source = true
+
+# Packages that are always permitted. Accepts a bare name or a full
+# coordinate ("npm:my-pkg@1.0.0"). Use this for reviewed false positives and
+# for internal packages that legitimately install from a private source.
+allowlist = [
+  # "esbuild",
+  # "@acme/internal-toolkit",
+]
+
+# Packages that are never permitted, at any version.
+denylist = [
+  # "event-stream",
+]
+
+[ai]
+# On-prem QWEN server. Expects an OpenAI-compatible /chat/completions endpoint
+# (vLLM, Ollama, llama.cpp and TGI all provide one).
+enabled = true
+base_url = "http://localhost:8000/v1"
+model = "qwen2.5-coder:7b"
+timeout_seconds = 20.0
+
+# When the server is unreachable, warn and let the commit through rather than
+# blocking every developer on an AI outage. Deterministic checks still run.
+# Set false in hardened environments where an unverifiable package must fail.
+fail_open = true
+
+[trivy]
+enabled = true
+binary_path = "trivy"
+timeout_seconds = 60.0
+
+# Skip the vulnerability DB refresh. Faster and works offline, at the cost of
+# missing advisories published since the last update.
+skip_db_update = false
+offline = false
