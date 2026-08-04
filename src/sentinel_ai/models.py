@@ -123,7 +123,7 @@ class PackageVerdict(BaseModel):
 
 
 class AIVerdict(BaseModel):
-    """Structured response from the on-prem QWEN server.
+    """Structured response from the on-prem model server.
 
     Field names mirror the JSON schema pinned in the prompt so the model's
     raw output validates directly into this type.

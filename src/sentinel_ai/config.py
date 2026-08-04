@@ -22,15 +22,16 @@ CONFIG_FILENAME = ".sentinel.toml"
 
 
 class AIConfig(BaseModel):
-    """On-prem QWEN server.
+    """On-prem model server.
 
     Assumes an OpenAI-compatible `/chat/completions` endpoint, which is what
-    vLLM, Ollama, and llama.cpp all expose. Point `base_url` at the server root.
+    vLLM, Ollama, llama.cpp, and TGI all expose. Point `base_url` and `model`
+    at your deployment.
     """
 
     enabled: bool = True
     base_url: str = "http://localhost:8000/v1"
-    model: str = "qwen2.5-coder:7b"
+    model: str = "local-model"
     api_key: str | None = None
     timeout_seconds: float = 20.0
     max_output_tokens: int = 768

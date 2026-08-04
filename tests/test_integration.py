@@ -167,7 +167,7 @@ class TestNotARepository:
 
 
 class TestAIStage:
-    """The QWEN stage runs through the real client, with the server mocked."""
+    """The AI review stage runs through the real client, with the server mocked."""
 
     def _stage_new_dependency(self, repo: Path) -> None:
         write(repo, "package.json", {"dependencies": {"some-new-lib": "1.0.0"}})

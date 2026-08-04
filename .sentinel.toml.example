@@ -29,11 +29,12 @@ denylist = [
 ]
 
 [ai]
-# On-prem QWEN server. Expects an OpenAI-compatible /chat/completions endpoint
-# (vLLM, Ollama, llama.cpp and TGI all provide one).
+# On-prem model server. Expects an OpenAI-compatible /chat/completions endpoint
+# (vLLM, Ollama, llama.cpp, TGI, etc.). Set base_url and model to match your
+# deployment — e.g. Ollama at http://localhost:11434/v1 with model "llama3".
 enabled = true
 base_url = "http://localhost:8000/v1"
-model = "qwen2.5-coder:7b"
+model = "local-model"
 timeout_seconds = 20.0
 
 # When the server is unreachable, warn and let the commit through rather than

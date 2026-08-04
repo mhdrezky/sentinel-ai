@@ -26,7 +26,7 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
                                + trivy          ▲
                                                 │
                                     ai/ ────────┘
-                              (on-prem QWEN, gated)
+                              (on-prem model, gated)
 ```
 
 1. **`gitdiff.py`** reads the *staged* blob and the `HEAD` blob for each changed
@@ -38,7 +38,7 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
    people to reach for `--no-verify`.
 3. **`scanner.py`** gathers evidence: offline heuristics plus Trivy for CVEs.
    It never decides anything.
-4. **`ai/`** sends the ambiguous cases to the on-prem QWEN server for a
+4. **`ai/`** sends the ambiguous cases to the on-prem model server for a
    contextual verdict. It only runs when the deterministic layer found
    something or a new direct dependency appeared — inference is the slowest
    stage and should stay off the hot path.
@@ -131,8 +131,8 @@ should use:
 
 | Variable | Effect |
 |---|---|
-| `SENTINEL_AI_BASE_URL` | QWEN server root (OpenAI-compatible) |
-| `SENTINEL_AI_MODEL` | Model name |
+| `SENTINEL_AI_BASE_URL` | On-prem model server root (OpenAI-compatible) |
+| `SENTINEL_AI_MODEL` | Model name on that server |
 | `SENTINEL_AI_API_KEY` | Bearer token, if the server requires one |
 | `SENTINEL_AI_ENABLED` | `false` disables the AI stage |
 | `SENTINEL_TRIVY_PATH` | Path to the Trivy binary |
@@ -145,9 +145,9 @@ sentinel-ai check              scan the staged index (the hook's default)
 sentinel-ai check --all        scan every manifest on disk
 sentinel-ai check --range A..B scan the changes between two refs
 sentinel-ai check --json       machine-readable report on stdout
-sentinel-ai check --no-ai      skip the QWEN stage
-sentinel-ai check --strict     block when Sentinel-AI or QWEN itself fails
-sentinel-ai doctor             check Trivy and the QWEN server
+sentinel-ai check --no-ai      skip the AI review stage
+sentinel-ai check --strict     block when Sentinel-AI or the model server fails
+sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai install-hook       write the Husky pre-commit hook
 ```
 
@@ -156,7 +156,7 @@ sentinel-ai install-hook       write the Husky pre-commit hook
 The defaults keep a broken dependency out, but do not let Sentinel-AI's own
 problems freeze the team:
 
-* **QWEN unreachable** → warn, keep the deterministic findings, allow the
+* **Model server unreachable** → warn, keep the deterministic findings, allow the
   commit (`ai.fail_open = true`).
 * **Trivy missing** → warn, skip CVE checks, continue.
 * **Internal error** → warn loudly that dependencies were *not* verified,
@@ -188,6 +188,11 @@ is never parsed as terminal markup.
   caching design.
 
 ## Notes on the AI stage
+
+The AI stage talks to any server that exposes an OpenAI-compatible
+`/chat/completions` endpoint — vLLM, Ollama, llama.cpp, TGI, or a hosted
+OpenAI-compatible gateway. Point `base_url` and `model` at your deployment;
+no vendor-specific integration is required.
 
 The system prompt tells the model that everything inside `<evidence>` is
 untrusted data, not instruction. A package can put text in its own description

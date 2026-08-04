@@ -1,4 +1,4 @@
-"""HTTP client for the on-prem QWEN server.
+"""HTTP client for the on-prem model server.
 
 Targets the OpenAI-compatible `/chat/completions` shape, which vLLM, Ollama,
 llama.cpp and TGI all expose. Only `base_url` and `model` should need changing
@@ -30,7 +30,7 @@ class AIUnavailable(RuntimeError):
     """
 
 
-class QwenClient:
+class AIClient:
     def __init__(self, config: AIConfig) -> None:
         self.config = config
 
@@ -74,15 +74,15 @@ class QwenClient:
                 response = client.post(url, json=payload, headers=headers)
         except httpx.TimeoutException as exc:
             raise AIUnavailable(
-                f"QWEN server did not respond within "
+                f"model server did not respond within "
                 f"{self.config.timeout_seconds:.0f}s ({url})"
             ) from exc
         except httpx.HTTPError as exc:
-            raise AIUnavailable(f"could not reach QWEN server at {url}: {exc}") from exc
+            raise AIUnavailable(f"could not reach model server at {url}: {exc}") from exc
 
         if response.status_code >= 400:
             raise AIUnavailable(
-                f"QWEN server returned HTTP {response.status_code}: "
+                f"model server returned HTTP {response.status_code}: "
                 f"{response.text[:200].strip()}"
             )
 
@@ -91,7 +91,7 @@ class QwenClient:
             content = body["choices"][0]["message"]["content"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             raise AIUnavailable(
-                f"QWEN server returned an unexpected response shape: {exc}"
+                f"model server returned an unexpected response shape: {exc}"
             ) from exc
 
         return parse_verdict(content)
@@ -123,15 +123,15 @@ def parse_verdict(content: str) -> AIVerdict:
     """
     raw = _extract_json_object(content)
     if raw is None:
-        raise AIUnavailable("QWEN response contained no JSON object")
+        raise AIUnavailable("model response contained no JSON object")
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise AIUnavailable(f"QWEN response was not valid JSON: {exc}") from exc
+        raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise AIUnavailable("QWEN response JSON was not an object")
+        raise AIUnavailable("model response JSON was not an object")
 
     # Normalise before validation: the model reliably produces the right shape
     # but not always the right types.
@@ -144,7 +144,7 @@ def parse_verdict(content: str) -> AIVerdict:
     try:
         return AIVerdict.model_validate(data)
     except ValidationError as exc:
-        raise AIUnavailable(f"QWEN verdict failed validation: {exc}") from exc
+        raise AIUnavailable(f"model verdict failed validation: {exc}") from exc
 
 
 def _clamp_confidence(value: object) -> float:

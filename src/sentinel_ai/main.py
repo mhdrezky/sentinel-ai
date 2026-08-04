@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from . import __version__
-from .ai import AIUnavailable, QwenClient
+from .ai import AIClient, AIUnavailable
 from .config import ConfigError, Settings
 from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide, requires_ai_review
 from .gitdiff import GitError, repo_root
@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     check = subparsers.add_parser("check", help="scan a change set (default)")
     _add_check_arguments(check)
 
-    doctor = subparsers.add_parser("doctor", help="verify Trivy and the QWEN server")
+    doctor = subparsers.add_parser("doctor", help="verify Trivy and the on-prem model server")
     doctor.add_argument(
         "--repo", type=Path, default=None, help="repository to read config from"
     )
@@ -82,13 +82,13 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument(
-        "--no-ai", action="store_true", help="skip the QWEN stage entirely"
+        "--no-ai", action="store_true", help="skip the AI review stage entirely"
     )
     parser.add_argument("--no-trivy", action="store_true", help="skip CVE scanning")
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="block the commit when Sentinel-AI or the QWEN server fails",
+        help="block the commit when Sentinel-AI or the model server fails",
     )
 
 
@@ -174,14 +174,14 @@ def _maybe_analyse(
     settings: Settings,
     reporter: Reporter,
 ) -> AIVerdict | None:
-    """Run the QWEN stage when it is enabled and the triage gate says it helps."""
+    """Run the AI review stage when it is enabled and the triage gate says it helps."""
     if not settings.ai.enabled:
         return None
     if not requires_ai_review(scan, settings.policy):
         return None
 
     try:
-        return QwenClient(settings.ai).analyse(
+        return AIClient(settings.ai).analyse(
             scan.changes, scan.findings, parsed_manifests
         )
     except AIUnavailable as exc:
@@ -196,7 +196,7 @@ def _maybe_analyse(
             confidence=1.0,
             summary=f"AI review could not complete and strict mode is on: {exc}",
             recommended_action=(
-                "Start the QWEN server, or re-run with --no-ai if the outage is expected."
+                "Start the model server, or re-run with --no-ai if the outage is expected."
             ),
         )
 
@@ -251,14 +251,14 @@ def _doctor(args: argparse.Namespace) -> int:
         )
 
     if not settings.ai.enabled:
-        reporter.info("  qwen:   [dim]disabled in config[/dim]")
+        reporter.info("  ai:     [dim]disabled in config[/dim]")
         return EXIT_PASS
 
     try:
-        status = QwenClient(settings.ai).health_check()
-        reporter.info(f"  qwen:   [green]{status}[/green] at {settings.ai.base_url}")
+        status = AIClient(settings.ai).health_check()
+        reporter.info(f"  ai:     [green]{status}[/green] at {settings.ai.base_url}")
     except AIUnavailable as exc:
-        reporter.info(f"  qwen:   [red]unavailable[/red] — {exc}")
+        reporter.info(f"  ai:     [red]unavailable[/red] — {exc}")
         return EXIT_BLOCK
 
     return EXIT_PASS

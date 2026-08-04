@@ -1,4 +1,4 @@
-"""QWEN client — response parsing and failure modes.
+"""AI client — response parsing and failure modes.
 
 Small models are unreliable formatters, so the parser is tested harder than
 the happy path deserves.
@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from sentinel_ai.ai.client import AIUnavailable, QwenClient, parse_verdict
+from sentinel_ai.ai.client import AIClient, AIUnavailable, parse_verdict
 from sentinel_ai.config import AIConfig
 from sentinel_ai.models import Ecosystem, PackageChange, Severity
 
@@ -84,7 +84,7 @@ class TestParseVerdict:
 
 class TestClientTransport:
     def _config(self) -> AIConfig:
-        return AIConfig(base_url="http://qwen.local/v1", model="qwen2.5-coder:7b")
+        return AIConfig(base_url="http://model.local/v1", model="test-model")
 
     def _changes(self) -> list[PackageChange]:
         return [
@@ -98,32 +98,32 @@ class TestClientTransport:
 
     def test_successful_call(self, httpx_mock):
         httpx_mock.add_response(
-            url="http://qwen.local/v1/chat/completions",
+            url="http://model.local/v1/chat/completions",
             json={"choices": [{"message": {"content": json.dumps(VALID_VERDICT)}}]},
         )
-        verdict = QwenClient(self._config()).analyse(self._changes(), [], {})
+        verdict = AIClient(self._config()).analyse(self._changes(), [], {})
         assert verdict.risk_level is Severity.HIGH
 
     def test_no_changes_skips_the_network_entirely(self):
         # No httpx_mock registration: a request here would fail the test.
-        assert QwenClient(self._config()).analyse([], [], {}).risk_level is Severity.NONE
+        assert AIClient(self._config()).analyse([], [], {}).risk_level is Severity.NONE
 
     def test_server_error_raises_ai_unavailable(self, httpx_mock):
         httpx_mock.add_response(status_code=500, text="internal error")
         with pytest.raises(AIUnavailable, match="HTTP 500"):
-            QwenClient(self._config()).analyse(self._changes(), [], {})
+            AIClient(self._config()).analyse(self._changes(), [], {})
 
     def test_connection_failure_raises_ai_unavailable(self, httpx_mock):
         import httpx
 
         httpx_mock.add_exception(httpx.ConnectError("refused"))
         with pytest.raises(AIUnavailable, match="could not reach"):
-            QwenClient(self._config()).analyse(self._changes(), [], {})
+            AIClient(self._config()).analyse(self._changes(), [], {})
 
     def test_unexpected_response_shape_raises(self, httpx_mock):
         httpx_mock.add_response(json={"unexpected": True})
         with pytest.raises(AIUnavailable, match="unexpected response shape"):
-            QwenClient(self._config()).analyse(self._changes(), [], {})
+            AIClient(self._config()).analyse(self._changes(), [], {})
 
     def test_api_key_is_sent_when_configured(self, httpx_mock):
         httpx_mock.add_response(
@@ -131,7 +131,7 @@ class TestClientTransport:
         )
         config = self._config()
         config.api_key = "secret-token"
-        QwenClient(config).analyse(self._changes(), [], {})
+        AIClient(config).analyse(self._changes(), [], {})
         request = httpx_mock.get_requests()[0]
         assert request.headers["Authorization"] == "Bearer secret-token"
 

@@ -1,4 +1,4 @@
-"""Prompt construction for the on-prem QWEN reviewer.
+"""Prompt construction for the on-prem model reviewer.
 
 Design notes:
 

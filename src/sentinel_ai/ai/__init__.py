@@ -1,5 +1,5 @@
-"""On-prem QWEN integration."""
+"""On-prem model integration."""
 
-from .client import AIUnavailable, QwenClient, parse_verdict
+from .client import AIClient, AIUnavailable, parse_verdict
 
-__all__ = ["AIUnavailable", "QwenClient", "parse_verdict"]
+__all__ = ["AIClient", "AIUnavailable", "parse_verdict"]
