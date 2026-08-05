@@ -76,7 +76,7 @@ Manual (if install changed):
 
 ```powershell
 # Dry-run on clean machine or VM
-irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 sentinel-ai doctor
 sentinel-ai config
 ```

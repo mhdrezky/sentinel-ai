@@ -12,15 +12,23 @@ alwaysApply: false
 - Idempotent; no admin; user-level `uv tool install`
 - Check `$LASTEXITCODE` after every `uv` / `sentinel-ai` call
 
-## Install source
+## One-liner (latest release)
 
 ```powershell
-# Default — NOT PyPI
-uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git"
-
-# Local dev override
-uv tool install --force --from $resolvedPath sentinel-ai
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
+
+Do **not** use raw branch URLs for the public installer.
+
+## Install source
+
+Resolve tag from `GET /repos/mhdrezky/sentinel-ai/releases/latest`, then:
+
+```powershell
+uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git@$tag"
+```
+
+Local dev override: `uv tool install --force --from $resolvedPath sentinel-ai`
 
 ## Remote piping (`irm | iex`)
 
@@ -28,13 +36,11 @@ Parameters do not pass through pipe. Support:
 
 ```powershell
 $env:SENTINEL_REPO_PATH = "D:\path\to\project"
-irm …/install.ps1 | iex
+irm …/releases/latest/download/install.ps1 | iex
 ```
-
-## PATH
-
-After uv install, refresh `%USERPROFILE%\.local\bin` (and `.cargo\bin` if needed) in the **current** process before verifying `sentinel-ai`.
 
 ## Host config
 
-Single source of truth: fetch `src/sentinel_ai/sentinel.toml` from GitHub raw URL, or inline fallback matching that file exactly (include `enable_thinking = false`). Never overwrite existing host config.
+Fetch `sentinel.toml` from the **same release tag** as the package install.
+Fallback heredoc must stay in sync with `src/sentinel_ai/sentinel.toml`.
+Never overwrite existing host config.

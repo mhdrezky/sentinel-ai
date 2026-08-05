@@ -4,9 +4,10 @@
   Install Sentinel-AI for the current user (zero admin required).
 
 .DESCRIPTION
-  Installs sentinel-ai from the GitHub repo via `uv tool install --from git`.
-  Designed to be run via `irm <url> | iex`.
-  Creates default config from the package's bundled sentinel.toml.
+  Installs sentinel-ai from the latest GitHub release via `uv tool install --from git@tag`.
+  Designed to be run via:
+    irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
+  Creates default config from the release's bundled sentinel.toml.
 
 .PARAMETER Source
   Override: path to a local directory containing setup.py or pyproject.toml.
@@ -30,10 +31,25 @@ if (-not $RepoPath -and $env:SENTINEL_REPO_PATH) {
 
 $CONFIG_DIR = "$env:USERPROFILE\.sentinel-ai"
 $CONFIG_FILE = "$CONFIG_DIR\config.toml"
+$GITHUB_REPO = "mhdrezky/sentinel-ai"
+$RELEASES_API = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
 
 function Write-Step([string] $Msg) { Write-Host " ==> $Msg" -ForegroundColor Cyan }
 function Write-Ok([string] $Msg)   { Write-Host " ok  $Msg" -ForegroundColor Green }
 function Write-Warn([string] $Msg){ Write-Host " !   $Msg" -ForegroundColor Yellow }
+
+function Get-LatestReleaseTag {
+    $headers = @{ "User-Agent" = "sentinel-ai-installer" }
+    try {
+        $release = Invoke-RestMethod -Uri $RELEASES_API -Headers $headers
+    } catch {
+        throw "Could not resolve latest release from GitHub API: $_"
+    }
+    if (-not $release.tag_name) {
+        throw "GitHub releases/latest returned no tag_name"
+    }
+    return $release.tag_name
+}
 
 Write-Host ""
 Write-Host "Sentinel-AI Installer" -ForegroundColor White
@@ -62,13 +78,15 @@ if (-not $uv) {
 }
 
 # --- 2. Install sentinel-ai ---
+$releaseTag = $null
 if ($Source -and (Test-Path $Source)) {
     Write-Step "Installing from local source: $Source"
     $resolved = (Resolve-Path $Source).Path
     uv tool install --force --from $resolved sentinel-ai
 } else {
-    Write-Step 'Installing from git (git+https://github.com/mhdrezky/sentinel-ai.git)'
-    uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git"
+    $releaseTag = Get-LatestReleaseTag
+    Write-Step "Installing from git release $releaseTag"
+    uv tool install --force "git+https://github.com/$GITHUB_REPO.git@$releaseTag"
 }
 
 if ($LASTEXITCODE -ne 0) { throw "uv tool install failed with exit code $LASTEXITCODE" }
@@ -90,18 +108,28 @@ if (-not (Test-Path $CONFIG_FILE)) {
     Write-Step "Creating default config at $CONFIG_FILE"
     New-Item -ItemType Directory -Path $CONFIG_DIR -Force | Out-Null
 
-    # Fetch sentinel.toml directly from the repo — no pip/uv tool resolution needed
-    $tomlUrl = "https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/src/sentinel_ai/sentinel.toml"
-    try {
-        Write-Step "Fetching config from GitHub"
-        $toml = irm $tomlUrl
-        $toml | Set-Content -Path $CONFIG_FILE -Encoding utf8
-        Write-Ok "Config fetched from $tomlUrl"
-    } catch {
-        Write-Warn "Could not fetch sentinel.toml: $_"
-        Write-Step "Falling back to default bundled config"
-        # keep in sync with src/sentinel_ai/sentinel.toml
-        @"
+    $bundledToml = $null
+    if ($Source -and (Test-Path $Source)) {
+        $candidate = Join-Path (Resolve-Path $Source).Path "src\sentinel_ai\sentinel.toml"
+        if (Test-Path $candidate) { $bundledToml = $candidate }
+    }
+
+    if ($bundledToml) {
+        Copy-Item -Path $bundledToml -Destination $CONFIG_FILE
+        Write-Ok "Config copied from local source"
+    } else {
+        $configTag = if ($releaseTag) { $releaseTag } else { Get-LatestReleaseTag }
+        $tomlUrl = "https://raw.githubusercontent.com/$GITHUB_REPO/$configTag/src/sentinel_ai/sentinel.toml"
+        try {
+            Write-Step "Fetching config from release $configTag"
+            $toml = irm $tomlUrl
+            $toml | Set-Content -Path $CONFIG_FILE -Encoding utf8
+            Write-Ok "Config fetched from $tomlUrl"
+        } catch {
+            Write-Warn "Could not fetch sentinel.toml: $_"
+            Write-Step "Falling back to default bundled config"
+            # keep in sync with src/sentinel_ai/sentinel.toml
+            @"
 # Sentinel-AI configuration
 # Edit this file to point [ai].base_url and [ai].model to your AI server.
 
@@ -128,7 +156,8 @@ timeout_seconds = 60.0
 skip_db_update = false
 offline = false
 "@ | Set-Content -Path $CONFIG_FILE -Encoding utf8
-        Write-Ok "Default config created"
+            Write-Ok "Default config created"
+        }
     }
     Write-Warn "Edit $CONFIG_FILE with your AI server settings"
 } else {

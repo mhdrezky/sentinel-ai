@@ -34,19 +34,20 @@ Ecosystems: npm, PyPI, NuGet, Composer.
 ## Install (Windows)
 
 ```powershell
-irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
 With project hook:
 
 ```powershell
 $env:SENTINEL_REPO_PATH = "D:\path\to\project"
-irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
 **Never** `uv tool install sentinel-ai` from PyPI — wrong package (ML toolkit, not this repo).
 
-Install source: `git+https://github.com/mhdrezky/sentinel-ai.git`
+Remote install resolves the **latest release tag** via GitHub API, then:
+`git+https://github.com/mhdrezky/sentinel-ai.git@<tag>`
 
 ## Development
 

@@ -24,8 +24,9 @@ No per-repo config files. `Settings.load()` is global; set `settings.repo_root` 
 ## Distribution
 
 - **Do not** install from PyPI name `sentinel-ai` — taken by another project.
-- Install via Git: `uv tool install --force git+https://github.com/mhdrezky/sentinel-ai.git`
-- One-liner: `irm …/scripts/install.ps1 | iex` (params via `$env:SENTINEL_REPO_PATH`, not `-RepoPath` on pipe)
+- Install via latest GitHub release (not PyPI name collision):
+  `irm github.com/.../releases/latest/download/install.ps1 | iex`
+  → resolves tag → `git+https://github.com/mhdrezky/sentinel-ai.git@<tag>`
 
 ## Change discipline
 

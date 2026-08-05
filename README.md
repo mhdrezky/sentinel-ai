@@ -99,9 +99,10 @@ uv run sentinel-ai check --repo /path/to/project --verbose
 ## Installing (Windows)
 
 ```powershell
-irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
+Pulls the installer from the **latest GitHub release** (same version as the tagged package).
 Auto-installs via `uv tool install` (user-level, no admin required), creates
 default config at `$env:USERPROFILE\.sentinel-ai\config.toml`.
 
@@ -117,7 +118,7 @@ Install into a specific project:
 
 ```powershell
 $env:SENTINEL_REPO_PATH = "D:\path\to\project"
-irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
+irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
 Then in the protected project, only Husky is needed (the installer writes the
