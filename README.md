@@ -106,14 +106,6 @@ Pulls the installer from the **latest GitHub release** (same version as the tagg
 Auto-installs via `uv tool install` (user-level, no admin required), creates
 default config at `$env:USERPROFILE\.sentinel-ai\config.toml`.
 
-Edit the config with your AI server settings, then:
-
-```powershell
-sentinel-ai doctor          # verify installation
-sentinel-ai config          # inspect active config
-sentinel-ai install-hook    # add pre-commit hook to current project
-```
-
 Install into a specific project:
 
 ```powershell
@@ -128,6 +120,102 @@ hook when `$env:SENTINEL_REPO_PATH` is set):
 #!/usr/bin/env sh
 sentinel-ai check || exit 1
 ```
+
+## Local AI server (on-prem model)
+
+The AI review stage calls an OpenAI-compatible `/chat/completions` endpoint
+(vLLM, Ollama, TGI, etc.). Point it at your internal deployment before enabling
+the hook in production repos.
+
+**1. Open host config:**
+
+```powershell
+notepad $env:USERPROFILE\.sentinel-ai\config.toml
+```
+
+**2. Set `base_url` and `model`** under `[ai]` — replace the localhost defaults
+with your server:
+
+```toml
+[ai]
+enabled = true
+base_url = "http://10.65.1.119:5003/v1"
+model = "Qwen/Qwen3.6-35B-A3B-FP8"
+timeout_seconds = 20.0
+max_output_tokens = 2048
+fail_open = true
+enable_thinking = false
+```
+
+Use your actual host, port, and model name. The URL must include the `/v1`
+suffix when the server exposes an OpenAI-compatible API root.
+
+**3. Verify** the server is reachable:
+
+```powershell
+sentinel-ai doctor
+sentinel-ai config
+```
+
+`doctor` should show `ai:` in green with your `base_url`. The AI stage runs
+automatically on pre-commit when heuristic or Trivy findings need contextual
+review, or when new direct dependencies are added (unless you pass `--no-ai`).
+
+If the model server is down, commits still proceed by default (`fail_open = true`)
+with a warning — deterministic checks still run.
+
+## Trivy (CVE scanning)
+
+Sentinel-AI runs Trivy automatically during `sentinel-ai check` (including the
+pre-commit hook) when a commit **introduces new or changed dependencies** in
+supported lockfiles. No separate daemon — it is invoked on demand from the
+configured binary path.
+
+### Windows setup
+
+**1. Download** Trivy v0.73.0 (64-bit):
+
+```powershell
+Invoke-WebRequest -Uri "https://github.com/aquasecurity/trivy/releases/download/v0.73.0/trivy_0.73.0_windows-64bit.zip" -OutFile "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit.zip"
+```
+
+**2. Extract** the archive:
+
+```powershell
+Expand-Archive -Path "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit.zip" -DestinationPath "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit" -Force
+```
+
+**3. Point Sentinel-AI at the binary** in host config:
+
+```powershell
+notepad $env:USERPROFILE\.sentinel-ai\config.toml
+```
+
+Under `[trivy]`, set `binary_path` to the full path of `trivy.exe` (forward
+slashes work in TOML on Windows):
+
+```toml
+[trivy]
+enabled = true
+binary_path = "C:/Users/rezky/Downloads/trivy_0.73.0_windows-64bit/trivy.exe"
+```
+
+Adjust the path to match your username and extract folder. Prefer a permanent
+location (for example `%LOCALAPPDATA%\trivy\trivy.exe`) over `Downloads` if you
+keep Trivy long term.
+
+**4. Verify:**
+
+```powershell
+sentinel-ai doctor
+```
+
+You should see `trivy:` with a version string. On the next commit that stages a
+new or upgraded dependency, Trivy CVE results are included automatically (unless
+you pass `--no-trivy`).
+
+If Trivy is missing or misconfigured, Sentinel-AI warns and continues without
+CVE checks by default (`trivy.enabled = true` but binary not found).
 
 ## Installing into a repository
 
