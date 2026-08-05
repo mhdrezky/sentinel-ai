@@ -13,8 +13,5 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 
-# Local config — copy from sentinel.toml.example and edit
-sentinel.toml
-
-# Packaged copy generated from sentinel.toml before install/build
+# Packaged defaults generated from sentinel.toml.example before install/build
 src/sentinel_ai/sentinel.toml

@@ -1,11 +1,9 @@
 # Organisation-wide Sentinel-AI configuration (template).
 #
-# Setup:
-#   Copy-Item sentinel.toml.example sentinel.toml
-#   Edit sentinel.toml locally (AI server, model, policy)
-#   .\scripts\install.ps1
+# Bundled defaults — copied into the package at build/install time.
+# Per-machine overrides: ~/.sentinel-ai/config.toml (auto-created by install.ps1)
 #
-# Inspect: sentinel-ai config
+# Inspect active config: sentinel-ai config
 
 [policy]
 # Block commits at this severity or above: low | medium | high | critical
@@ -24,7 +22,7 @@ allowlist = []
 denylist = []
 
 [ai]
-# Set base_url and model to your on-prem OpenAI-compatible server (vLLM, Ollama, TGI)
+# Override base_url and model in ~/.sentinel-ai/config.toml on each host
 enabled = true
 base_url = "http://localhost:8000/v1"
 model = "local-model"

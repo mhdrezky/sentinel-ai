@@ -1,12 +1,12 @@
 """Configuration, resolved from (in ascending precedence):
 
 1. built-in defaults
-2. bundled `sentinel.toml` (project root in dev, packaged copy when installed)
-3. global override (`~/.config/sentinel-ai/config.toml`, then `SENTINEL_CONFIG`)
-4. `SENTINEL_*` environment variables
+2. bundled defaults shipped with the package (from `sentinel.toml.example`)
+3. host override at `~/.sentinel-ai/config.toml` (created on install)
+4. `SENTINEL_CONFIG` environment variable (optional explicit path)
+5. `SENTINEL_*` environment variables
 
-Organisation defaults live in `sentinel.toml` (copy from `sentinel.toml.example`).
-Inspect with `sentinel-ai config`; edit locally and re-run install to roll out.
+Edit the host file after install: `sentinel-ai config` shows the active path.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 from .models import Severity
 
 BUNDLED_CONFIG_NAME = "sentinel.toml"
+HOST_CONFIG_DIRNAME = ".sentinel-ai"
+HOST_CONFIG_FILENAME = "config.toml"
 
 
 class AIConfig(BaseModel):
@@ -130,24 +132,14 @@ class ConfigError(RuntimeError):
     """Raised when a present-but-broken config file is found."""
 
 
-def _project_root() -> Path | None:
-    """Sentinel-AI repository root when running from a source checkout."""
-    for parent in Path(__file__).resolve().parents:
-        if (parent / "pyproject.toml").is_file() and (parent / BUNDLED_CONFIG_NAME).is_file():
-            return parent
-    return None
+def host_config_path() -> Path:
+    """Per-machine override written by scripts/install.ps1."""
+    return Path.home() / HOST_CONFIG_DIRNAME / HOST_CONFIG_FILENAME
 
 
-def _bundled_config_paths() -> list[Path]:
-    """Organisation config: packaged copy, then project root in dev."""
-    paths: list[Path] = []
-    pkg_config = Path(__file__).resolve().parent / BUNDLED_CONFIG_NAME
-    paths.append(pkg_config)
-    if root := _project_root():
-        root_config = root / BUNDLED_CONFIG_NAME
-        if root_config != pkg_config:
-            paths.append(root_config)
-    return paths
+def _bundled_config_path() -> Path:
+    """Default config shipped inside the installed package."""
+    return Path(__file__).resolve().parent / BUNDLED_CONFIG_NAME
 
 
 def resolved_config_paths() -> list[Path]:
@@ -157,10 +149,7 @@ def resolved_config_paths() -> list[Path]:
 
 def _global_config_paths() -> list[Path]:
     """Global config locations, checked in order."""
-    paths: list[Path] = list(_bundled_config_paths())
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    config_home = Path(xdg).expanduser() if xdg else Path.home() / ".config"
-    paths.append(config_home / "sentinel-ai" / "config.toml")
+    paths: list[Path] = [_bundled_config_path(), host_config_path()]
     if env_path := os.environ.get("SENTINEL_CONFIG"):
         paths.append(Path(env_path).expanduser())
     return paths

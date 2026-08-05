@@ -9,8 +9,8 @@
   3. Installs the `sentinel-ai` CLI from this repository
   4. Optionally writes a Husky pre-commit hook into a project repository
 
-  Organisation config (AI server, policy, Trivy) ships inside the package at
-  `src/sentinel_ai/sentinel.toml`. Developers do not set env vars manually.
+  Organisation defaults ship with the package. Per-machine overrides live in
+  `%USERPROFILE%\.sentinel-ai\config.toml`, auto-created from sentinel.toml.example.
 
 .PARAMETER Source
   Local path to the sentinel-ai repository, or a git URL. Defaults to the repo
@@ -143,6 +143,22 @@ function Install-SentinelAiTool([string] $UvExe, [string] $InstallSource) {
     Write-Ok "sentinel-ai installed at $($tool.Source)"
 }
 
+function Ensure-HostConfig([string] $ExamplePath) {
+    $hostConfigDir = Join-Path $env:USERPROFILE ".sentinel-ai"
+    $hostConfig = Join-Path $hostConfigDir "config.toml"
+    if (-not (Test-Path $hostConfig)) {
+        Write-Step "Creating host config at $hostConfig"
+        New-Item -ItemType Directory -Force -Path $hostConfigDir | Out-Null
+        Copy-Item -Path $ExamplePath -Destination $hostConfig
+        Write-Ok "Created from sentinel.toml.example"
+        Write-Warn "Edit $hostConfig with your AI server settings"
+    }
+    else {
+        Write-Ok "Host config: $hostConfig"
+    }
+    return $hostConfig
+}
+
 function Install-RepoHook([string] $RepoPath) {
     if (-not (Test-Path $RepoPath)) {
         throw "Repository path not found: $RepoPath"
@@ -170,7 +186,6 @@ if (-not $Source) {
 }
 
 $exampleConfig = Join-Path $repoRoot "sentinel.toml.example"
-$localConfig = Join-Path $repoRoot "sentinel.toml"
 
 Write-Host ""
 Write-Host "Sentinel-AI installer" -ForegroundColor White
@@ -179,14 +194,10 @@ Write-Host ""
 if (-not (Test-Path $exampleConfig)) {
     throw "Template not found: $exampleConfig"
 }
-if (-not (Test-Path $localConfig)) {
-    Copy-Item -Path $exampleConfig -Destination $localConfig
-    Write-Ok "Created sentinel.toml from sentinel.toml.example"
-    Write-Warn "Edit sentinel.toml with your AI server settings, then re-run this script"
-}
-Write-Ok "Config: $localConfig"
 
-Write-Step "Syncing config into package for install"
+Ensure-HostConfig -ExamplePath $exampleConfig | Out-Null
+
+Write-Step "Syncing bundled defaults into package"
 & (Join-Path $scriptRoot "sync-config.ps1") -RepoRoot $repoRoot
 
 $uvExe = Ensure-Uv
@@ -198,7 +209,7 @@ if ($Repo) {
 }
 
 Write-Host ""
-Write-Ok "Done. Verify with: sentinel-ai doctor"
+Write-Ok "Done. Verify with: sentinel-ai doctor and sentinel-ai config"
 if (-not $Repo) {
     Write-Warn "Next: .\scripts\install.ps1 -Repo D:\path\to\your-project"
 }

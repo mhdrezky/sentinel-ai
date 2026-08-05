@@ -1,11 +1,11 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Copy root sentinel.toml into the package tree for wheel builds.
+  Copy sentinel.toml.example into the package tree for wheel builds.
 
 .DESCRIPTION
-  uv_build only ships files under src/sentinel_ai/. The canonical config lives
-  at the project root; this script syncs it before `uv tool install` or `uv build`.
+  uv_build only ships files under src/sentinel_ai/. The bundled defaults come
+  from sentinel.toml.example; host overrides live in ~/.sentinel-ai/config.toml.
 #>
 [CmdletBinding()]
 param(
@@ -19,11 +19,11 @@ if (-not $RepoRoot) {
     $RepoRoot = Split-Path -Parent $PSScriptRoot
 }
 
-$source = Join-Path $RepoRoot "sentinel.toml"
+$source = Join-Path $RepoRoot "sentinel.toml.example"
 $target = Join-Path $RepoRoot "src\sentinel_ai\sentinel.toml"
 
 if (-not (Test-Path $source)) {
-    throw "Config not found: $source"
+    throw "Template not found: $source"
 }
 
 $targetDir = Split-Path -Parent $target

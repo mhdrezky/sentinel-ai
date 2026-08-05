@@ -63,14 +63,12 @@ staying silent about it.
 
 ## Development
 
-Organisation config template: [`sentinel.toml.example`](sentinel.toml.example).
-Copy to `sentinel.toml` locally and edit — that file is not committed.
-When building or installing the CLI, sync it into the package first:
+Bundled defaults come from [`sentinel.toml.example`](sentinel.toml.example).
+Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
+`install.ps1`).
 
 ```powershell
-Copy-Item sentinel.toml.example sentinel.toml
-# edit sentinel.toml — set base_url, model, allowlist, etc.
-.\scripts\sync-config.ps1
+.\scripts\sync-config.ps1   # before build or uv tool install
 ```
 
 ```bash
@@ -117,13 +115,14 @@ the hook, switch the spec to one-dir mode (`COLLECT`) — startup drops to about
 
 ## Installing for developers (Windows)
 
-  Config template: [`sentinel.toml.example`](sentinel.toml.example). Each developer
-  copies it to `sentinel.toml` locally — `install.ps1` does this automatically.
+`install.ps1` auto-creates `%USERPROFILE%\.sentinel-ai\config.toml` from the
+template. Edit that file with your AI server settings.
 
 ```powershell
 git clone <internal-url>/sentinel-ai.git
 cd sentinel-ai
 .\scripts\install.ps1 -Repo D:\Repositories\your-project
+notepad $env:USERPROFILE\.sentinel-ai\config.toml
 ```
 
 The installer auto-detects `uv`, installs it when missing, installs Python 3.13,
@@ -171,9 +170,14 @@ sentinel-ai config
 
 ## Configuration
 
-All organisation settings live in local `sentinel.toml` (from
-[`sentinel.toml.example`](sentinel.toml.example)). Protected repositories only
-need the Husky hook.
+Defaults ship with the package. Each host overrides via:
+
+```text
+~/.sentinel-ai/config.toml     (Windows: %USERPROFILE%\.sentinel-ai\config.toml)
+```
+
+Created automatically on first `install.ps1` run from `sentinel.toml.example`.
+Protected repositories only need the Husky hook.
 
 Inspect the active configuration:
 
@@ -184,21 +188,13 @@ sentinel-ai config --json
 
 | Source | Purpose |
 |---|---|
-| `sentinel.toml.example` | **Tracked template** — copy to `sentinel.toml` locally |
-| `sentinel.toml` | **Local config** (gitignored) — AI server, Trivy, policy |
-| `SENTINEL_CONFIG` / `~/.config/sentinel-ai/config.toml` | Optional machine-wide override |
+| `sentinel.toml.example` | **Tracked template** — bundled defaults |
+| `~/.sentinel-ai/config.toml` | **Per-host override** — edit AI server, policy |
+| `SENTINEL_CONFIG` | Optional explicit config path |
 | `SENTINEL_*` env vars | Override for CI/agents |
 
-Precedence (low → high): defaults → local `sentinel.toml` → `~/.config`
-/ `SENTINEL_CONFIG` → env vars.
-
-First-time setup:
-
-```powershell
-Copy-Item sentinel.toml.example sentinel.toml
-# edit sentinel.toml
-.\scripts\install.ps1
-```
+Precedence (low → high): defaults → bundled → `~/.sentinel-ai/config.toml`
+→ `SENTINEL_CONFIG` → env vars.
 
 | Variable | Effect |
 |---|---|

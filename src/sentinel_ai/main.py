@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import __version__
 from .ai import AIClient, AIUnavailable
-from .config import ConfigError, Settings, resolved_config_paths
+from .config import ConfigError, Settings, host_config_path, resolved_config_paths
 from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide, requires_ai_review
 from .gitdiff import GitError, repo_root
 from .manifests import ParsedManifest
@@ -342,10 +342,7 @@ def _config(args: argparse.Namespace) -> int:
         reporter.info("  ai:     [dim]disabled[/dim]")
 
     reporter.info(f"  trivy:  `{settings.trivy.binary_path}`")
-    reporter.info(
-        "[dim]Edit sentinel.toml (copy from sentinel.toml.example), then re-run "
-        "scripts/install.ps1 to roll out changes.[/dim]"
-    )
+    reporter.info(f"[dim]Edit host overrides in {host_config_path()}[/dim]")
     return EXIT_PASS
 
 
