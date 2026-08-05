@@ -1,8 +1,8 @@
 """Configuration, resolved from (in ascending precedence):
 
-1. built-in defaults
-2. bundled defaults shipped with the package (from `sentinel.toml.example`)
-3. host override at `~/.sentinel-ai/config.toml` (created on install)
+1. built-in defaults (pydantic Field defaults)
+2. bundled defaults shipped with the package (`src/sentinel_ai/sentinel.toml`)
+3. host override at `~/.sentinel-ai/config.toml` (created by install.ps1 on first run)
 4. `SENTINEL_CONFIG` environment variable (optional explicit path)
 5. `SENTINEL_*` environment variables
 

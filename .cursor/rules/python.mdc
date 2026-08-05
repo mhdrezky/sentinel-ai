@@ -1,0 +1,35 @@
+---
+description: Python conventions for src/ and tests/
+globs: "{src,tests}/**/*.py"
+alwaysApply: false
+---
+
+# Python
+
+## Stack
+
+Python 3.13+, pydantic v2, httpx, rich. CLI uses argparse (not typer/click) — keep hook startup fast.
+
+## Modules
+
+| Module | Role |
+|--------|------|
+| `gitdiff.py` | Read staged vs HEAD blobs only |
+| `manifests.py` | Parse + diff manifests |
+| `scanner.py` | Gather findings; never decides |
+| `heuristics.py` | Offline checks |
+| `decision_engine.py` | Policy + exit code |
+| `ai/client.py` | OpenAI-compatible `/chat/completions` |
+
+## Rules
+
+- Prefer extending existing functions over new abstractions.
+- Finding text may contain attacker-controlled strings — never parse as Rich markup.
+- Tests may import private helpers (`tests/*` has SLF001 ignored).
+- Windows pytest: use `uv run python -m pytest` if trampoline fails.
+
+## AI client (Qwen3 / vLLM)
+
+- `enable_thinking: false` by default
+- Read `reasoning` field when `content` is empty
+- `max_output_tokens: 2048` minimum for JSON verdicts

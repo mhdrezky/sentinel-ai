@@ -1,0 +1,40 @@
+---
+description: Windows installer and PowerShell script conventions
+globs: scripts/**/*.ps1
+alwaysApply: false
+---
+
+# install.ps1
+
+## Requirements
+
+- `#Requires -Version 5.1`, `$ErrorActionPreference = "Stop"`
+- Idempotent; no admin; user-level `uv tool install`
+- Check `$LASTEXITCODE` after every `uv` / `sentinel-ai` call
+
+## Install source
+
+```powershell
+# Default — NOT PyPI
+uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git"
+
+# Local dev override
+uv tool install --force --from $resolvedPath sentinel-ai
+```
+
+## Remote piping (`irm | iex`)
+
+Parameters do not pass through pipe. Support:
+
+```powershell
+$env:SENTINEL_REPO_PATH = "D:\path\to\project"
+irm …/install.ps1 | iex
+```
+
+## PATH
+
+After uv install, refresh `%USERPROFILE%\.local\bin` (and `.cargo\bin` if needed) in the **current** process before verifying `sentinel-ai`.
+
+## Host config
+
+Single source of truth: fetch `src/sentinel_ai/sentinel.toml` from GitHub raw URL, or inline fallback matching that file exactly (include `enable_thinking = false`). Never overwrite existing host config.

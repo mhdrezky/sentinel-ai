@@ -63,13 +63,10 @@ staying silent about it.
 
 ## Development
 
-Bundled defaults come from [`sentinel.toml.example`](sentinel.toml.example).
+Bundled defaults come from [`src/sentinel_ai/sentinel.toml`](src/sentinel_ai/sentinel.toml)
+( tracked in git ).
 Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
 `install.ps1`).
-
-```powershell
-.\scripts\sync-config.ps1   # before build or uv tool install
-```
 
 ```bash
 uv sync --group dev
@@ -99,29 +96,32 @@ Run it against a repository without installing anything:
 uv run sentinel-ai check --repo /path/to/project --verbose
 ```
 
-## Installing for developers (Windows)
-
-`install.ps1` auto-creates `%USERPROFILE%\.sentinel-ai\config.toml` from the
-template. Edit that file with your AI server settings.
+## Installing (Windows)
 
 ```powershell
-git clone <internal-url>/sentinel-ai.git
-cd sentinel-ai
-.\scripts\install.ps1 -Repo D:\Repositories\your-project
-notepad $env:USERPROFILE\.sentinel-ai\config.toml
+irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
 ```
 
-The installer auto-detects `uv`, installs it when missing, installs Python 3.13,
-and puts `sentinel-ai` on PATH. Re-run anytime to upgrade.
+Auto-installs via `uv tool install` (user-level, no admin required), creates
+default config at `$env:USERPROFILE\.sentinel-ai\config.toml`.
 
-Verify:
+Edit the config with your AI server settings, then:
 
 ```powershell
-sentinel-ai doctor
+sentinel-ai doctor          # verify installation
+sentinel-ai config          # inspect active config
+sentinel-ai install-hook    # add pre-commit hook to current project
+```
+
+Install into a specific project:
+
+```powershell
+$env:SENTINEL_REPO_PATH = "D:\path\to\project"
+irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.ps1 | iex
 ```
 
 Then in the protected project, only Husky is needed (the installer writes the
-hook when `-Repo` is passed):
+hook when `-RepoPath` is passed):
 
 ```sh
 #!/usr/bin/env sh
@@ -162,7 +162,7 @@ Defaults ship with the package. Each host overrides via:
 ~/.sentinel-ai/config.toml     (Windows: %USERPROFILE%\.sentinel-ai\config.toml)
 ```
 
-Created automatically on first `install.ps1` run from `sentinel.toml.example`.
+Created automatically on first `install.ps1` run from the package's bundled `sentinel.toml`.
 Protected repositories only need the Husky hook.
 
 Inspect the active configuration:
@@ -174,7 +174,7 @@ sentinel-ai config --json
 
 | Source | Purpose |
 |---|---|
-| `sentinel.toml.example` | **Tracked template** — bundled defaults |
+| `src/sentinel_ai/sentinel.toml` | **Tracked config** — bundled defaults in the package |
 | `~/.sentinel-ai/config.toml` | **Per-host override** — edit AI server, policy |
 | `SENTINEL_CONFIG` | Optional explicit config path |
 | `SENTINEL_*` env vars | Override for CI/agents |

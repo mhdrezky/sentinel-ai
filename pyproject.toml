@@ -1,7 +1,7 @@
 [project]
 name = "sentinel-ai"
 version = "0.1.0"
-description = "Add your description here"
+description = "Local supply-chain guard — blocks malicious dependencies in pre-commit hooks"
 readme = "README.md"
 authors = [
     { name = 'PACCOM\rezky', email = "rezky@pacificcomponents.com.au" }
@@ -19,9 +19,6 @@ sentinel-ai = "sentinel_ai:main"
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]
 build-backend = "uv_build"
-
-[tool.uv.build-backend]
-source-include = ["sentinel.toml.example"]
 
 [tool.ruff]
 line-length = 90

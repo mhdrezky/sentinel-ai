@@ -1,216 +1,160 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Install Sentinel-AI on a Windows developer machine (idempotent, zero config).
+  Install Sentinel-AI for the current user (zero admin required).
 
 .DESCRIPTION
-  1. Detects `uv` on PATH — installs it via Astral when missing
-  2. Ensures Python 3.13 through `uv`
-  3. Installs the `sentinel-ai` CLI from this repository
-  4. Optionally writes a Husky pre-commit hook into a project repository
-
-  Organisation defaults ship with the package. Per-machine overrides live in
-  `%USERPROFILE%\.sentinel-ai\config.toml`, auto-created from sentinel.toml.example.
+  Installs sentinel-ai from the GitHub repo via `uv tool install --from git`.
+  Designed to be run via `irm <url> | iex`.
+  Creates default config from the package's bundled sentinel.toml.
 
 .PARAMETER Source
-  Local path to the sentinel-ai repository, or a git URL. Defaults to the repo
-  that contains this script.
-
-.PARAMETER Repo
-  Project repository to run `sentinel-ai install-hook` after installation.
-
-.PARAMETER SkipPython
-  Skip `uv python install` when Python 3.13 is already managed by uv.
-
-.EXAMPLE
-  # Clone sentinel-ai, then one command — ready to use
-  .\scripts\install.ps1
-
-.EXAMPLE
-  # Install CLI and wire the hook into a project
-  .\scripts\install.ps1 -Repo "D:\Repositories\website"
+  Override: path to a local directory containing setup.py or pyproject.toml.
+  Skips remote install and installs from local source instead.
+.PARAMETER RepoPath
+  Path to a git repository to install the Husky pre-commit hook into.
 #>
 [CmdletBinding()]
 param(
     [string] $Source,
-    [string] $Repo,
-    [switch] $SkipPython
+    [string] $RepoPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Write-Step([string] $Message) {
-    Write-Host "==> $Message" -ForegroundColor Cyan
+# Fallback from environment variable (for remote script piping)
+if (-not $RepoPath -and $env:SENTINEL_REPO_PATH) {
+    $RepoPath = $env:SENTINEL_REPO_PATH
 }
 
-function Write-Ok([string] $Message) {
-    Write-Host " ok  $Message" -ForegroundColor Green
-}
+$CONFIG_DIR = "$env:USERPROFILE\.sentinel-ai"
+$CONFIG_FILE = "$CONFIG_DIR\config.toml"
 
-function Write-Warn([string] $Message) {
-    Write-Host " !   $Message" -ForegroundColor Yellow
-}
+function Write-Step([string] $Msg) { Write-Host " ==> $Msg" -ForegroundColor Cyan }
+function Write-Ok([string] $Msg)   { Write-Host " ok  $Msg" -ForegroundColor Green }
+function Write-Warn([string] $Msg){ Write-Host " !   $Msg" -ForegroundColor Yellow }
 
-function Get-UvCandidatePaths {
-    @(
-        (Join-Path $env:USERPROFILE ".local\bin\uv.exe")
-        (Join-Path $env:LOCALAPPDATA "uv\uv.exe")
-        (Join-Path $env:ProgramFiles "uv\uv.exe")
-    )
-}
+Write-Host ""
+Write-Host "Sentinel-AI Installer" -ForegroundColor White
+Write-Host ""
 
-function Import-UvPath {
-    $dirs = @(
-        (Join-Path $env:USERPROFILE ".local\bin")
-        (Join-Path $env:LOCALAPPDATA "uv")
-        (Join-Path $env:ProgramFiles "uv")
-    ) | Where-Object { Test-Path $_ }
-
-    foreach ($dir in $dirs) {
-        if ($env:PATH -notlike "*$dir*") {
-            $env:PATH = "$dir;$env:PATH"
-        }
-    }
-}
-
-function Find-UvExecutable {
-    Import-UvPath
-    $cmd = Get-Command uv -ErrorAction SilentlyContinue
-    if ($cmd) {
-        return $cmd.Source
-    }
-    foreach ($candidate in Get-UvCandidatePaths) {
-        if (Test-Path $candidate) {
-            return (Resolve-Path $candidate).Path
-        }
-    }
-    return $null
-}
-
-function Install-Uv {
+# --- 1. Ensure uv ---
+$uv = Get-Command uv -ErrorAction SilentlyContinue
+if (-not $uv) {
     Write-Step "uv not found — installing via Astral installer"
-    irm https://astral.sh/uv/install.ps1 | iex
-    Import-UvPath
-    $uv = Find-UvExecutable
+    $uvInstAllPath = "$env:USERPROFILE\.cargo\bin"
+    iex ((Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing).Content)
+
+    # Astral installer writes to PATH but may not update the current process
+    $uv = Get-Command uv -ErrorAction SilentlyContinue
     if (-not $uv) {
-        throw "uv install finished but the executable is still not on PATH. Open a new terminal and re-run this script."
+        Write-Step "Refreshing PATH to include $($uvInstAllPath)"
+        $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+        if (-not ($currentPath -split ';' | Where-Object { $_ -eq $uvInstAllPath })) {
+            [Environment]::SetEnvironmentVariable("Path", "$uvInstAllPath;$currentPath", "User")
+            $env:Path = "$uvInstAllPath;$currentPath"
+        }
+        $uv = Get-Command uv -ErrorAction SilentlyContinue
     }
-    Write-Ok "uv installed at $uv"
-    return $uv
+    if (-not $uv) { throw "uv install finished but executable is not on PATH. Start a new terminal and re-run." }
+    Write-Ok "uv installed at $($uv.Source)"
 }
 
-function Ensure-Uv {
-    $uv = Find-UvExecutable
-    if ($uv) {
-        Write-Ok "uv found at $uv"
-        return $uv
-    }
-    return Install-Uv
+# --- 2. Install sentinel-ai ---
+if ($Source -and (Test-Path $Source)) {
+    Write-Step "Installing from local source: $Source"
+    $resolved = (Resolve-Path $Source).Path
+    uv tool install --force --from $resolved sentinel-ai
+} else {
+    Write-Step 'Installing from git (git+https://github.com/mhdrezky/sentinel-ai.git)'
+    uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git"
 }
 
-function Ensure-Python([string] $UvExe) {
-    if ($SkipPython) {
-        Write-Warn "Skipping Python install (-SkipPython)"
-        return
+if ($LASTEXITCODE -ne 0) { throw "uv tool install failed with exit code $LASTEXITCODE" }
+
+# --- 3. Verify sentinel-ai on PATH ---
+$cli = Get-Command sentinel-ai -ErrorAction SilentlyContinue
+if (-not $cli) {
+    # uv tool installs to %USERPROFILE%\.cargo\bin or %USERPROFILE%\.local\bin
+    $toolBin = "$env:USERPROFILE\.local\bin"
+    $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($currentPath -split ';' | Where-Object { $_ -eq $toolBin }) {
+        $env:Path = "$toolBin;$env:Path"
+        $cli = Get-Command sentinel-ai -ErrorAction SilentlyContinue
     }
-    Write-Step "Ensuring Python 3.13 via uv"
-    & $UvExe python install 3.13
-    if ($LASTEXITCODE -ne 0) {
-        throw "uv python install 3.13 failed with exit code $LASTEXITCODE"
+}
+if (-not $cli) { throw "sentinel-ai binary not found on PATH after install. Start a new terminal and re-run." }
+Write-Ok "sentinel-ai installed at $($cli.Source)"
+
+# --- 4. Create host config from package ---
+if (-not (Test-Path $CONFIG_FILE)) {
+    Write-Step "Creating default config at $CONFIG_FILE"
+    New-Item -ItemType Directory -Path $CONFIG_DIR -Force | Out-Null
+
+    # Fetch sentinel.toml directly from the repo — no pip/uv tool resolution needed
+    $tomlUrl = "https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/src/sentinel_ai/sentinel.toml"
+    try {
+        Write-Step "Fetching config from GitHub"
+        $toml = irm $tomlUrl
+        $toml | Set-Content -Path $CONFIG_FILE -Encoding utf8
+        Write-Ok "Config fetched from $tomlUrl"
+    } catch {
+        Write-Warn "Could not fetch sentinel.toml: $_"
+        Write-Step "Falling back to default bundled config"
+        @"
+# Sentinel-AI configuration
+# Edit this file to point [ai].base_url and [ai].model to your AI server.
+
+[policy]
+block_at_or_above = "high"
+block_on_install_scripts = true
+block_on_nonregistry_source = true
+allowlist = []
+denylist = []
+
+[ai]
+enabled = true
+base_url = "http://localhost:8000/v1"
+model = "local-model"
+timeout_seconds = 20.0
+max_output_tokens = 2048
+fail_open = true
+enable_thinking = false
+
+[trivy]
+enabled = true
+binary_path = "trivy"
+timeout_seconds = 60.0
+skip_db_update = false
+offline = false
+"@ | Set-Content -Path $CONFIG_FILE -Encoding utf8
+        Write-Ok "Default config created"
     }
-    Write-Ok "Python 3.13 ready"
+    Write-Warn "Edit $CONFIG_FILE with your AI server settings"
+} else {
+    Write-Ok "Config already exists at $CONFIG_FILE"
 }
 
-function Install-SentinelAiTool([string] $UvExe, [string] $InstallSource) {
-    Write-Step "Installing sentinel-ai CLI from $InstallSource"
-    if (Test-Path $InstallSource) {
-        $resolved = (Resolve-Path $InstallSource).Path
-        & $UvExe tool install --force --from $resolved sentinel-ai
-    }
-    else {
-        & $UvExe tool install --force sentinel-ai --from $InstallSource
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "uv tool install sentinel-ai failed with exit code $LASTEXITCODE"
-    }
-    Import-UvPath
-    $tool = Get-Command sentinel-ai -ErrorAction SilentlyContinue
-    if (-not $tool) {
-        $toolDir = Join-Path $env:USERPROFILE ".local\bin"
-        throw "sentinel-ai was installed but is not on PATH yet. Add $toolDir to PATH or open a new terminal."
-    }
-    Write-Ok "sentinel-ai installed at $($tool.Source)"
-}
-
-function Ensure-HostConfig([string] $ExamplePath) {
-    $hostConfigDir = Join-Path $env:USERPROFILE ".sentinel-ai"
-    $hostConfig = Join-Path $hostConfigDir "config.toml"
-    if (-not (Test-Path $hostConfig)) {
-        Write-Step "Creating host config at $hostConfig"
-        New-Item -ItemType Directory -Force -Path $hostConfigDir | Out-Null
-        Copy-Item -Path $ExamplePath -Destination $hostConfig
-        Write-Ok "Created from sentinel.toml.example"
-        Write-Warn "Edit $hostConfig with your AI server settings"
-    }
-    else {
-        Write-Ok "Host config: $hostConfig"
-    }
-    return $hostConfig
-}
-
-function Install-RepoHook([string] $RepoPath) {
-    if (-not (Test-Path $RepoPath)) {
-        throw "Repository path not found: $RepoPath"
-    }
+# --- 5. Post-install hook (optional) ---
+if ($RepoPath) {
+    if (-not (Test-Path $RepoPath)) { throw "Repository path not found: $RepoPath" }
     Write-Step "Installing Husky pre-commit hook in $RepoPath"
     Push-Location $RepoPath
     try {
-        & sentinel-ai install-hook
-        if ($LASTEXITCODE -ne 0) {
-            throw "sentinel-ai install-hook failed with exit code $LASTEXITCODE"
-        }
-    }
-    finally {
+        sentinel-ai install-hook
+        if ($LASTEXITCODE -ne 0) { throw "install-hook failed with exit code $LASTEXITCODE" }
+        Write-Ok "Hook installed"
+    } catch {
+        Write-Warn "Hook install failed: $_"
+    } finally {
         Pop-Location
     }
-    Write-Ok "Hook installed in $RepoPath"
-}
-
-# --- main ---
-
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$repoRoot = Split-Path -Parent $scriptRoot
-if (-not $Source) {
-    $Source = $repoRoot
-}
-
-$exampleConfig = Join-Path $repoRoot "sentinel.toml.example"
-
-Write-Host ""
-Write-Host "Sentinel-AI installer" -ForegroundColor White
-Write-Host ""
-
-if (-not (Test-Path $exampleConfig)) {
-    throw "Template not found: $exampleConfig"
-}
-
-Ensure-HostConfig -ExamplePath $exampleConfig | Out-Null
-
-Write-Step "Syncing bundled defaults into package"
-& (Join-Path $scriptRoot "sync-config.ps1") -RepoRoot $repoRoot
-
-$uvExe = Ensure-Uv
-Ensure-Python -UvExe $uvExe
-Install-SentinelAiTool -UvExe $uvExe -InstallSource $Source
-
-if ($Repo) {
-    Install-RepoHook -RepoPath $Repo
 }
 
 Write-Host ""
-Write-Ok "Done. Verify with: sentinel-ai doctor and sentinel-ai config"
-if (-not $Repo) {
-    Write-Warn "Next: .\scripts\install.ps1 -Repo D:\path\to\your-project"
-}
+Write-Host "Sentinel-AI installed successfully" -ForegroundColor Green
+Write-Host ""
+Write-Host "  Verify:  sentinel-ai doctor"
+Write-Host "  Config:  sentinel-ai config"
 Write-Host ""

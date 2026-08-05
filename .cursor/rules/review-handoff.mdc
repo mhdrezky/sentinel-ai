@@ -1,0 +1,35 @@
+---
+description: Review output format and OpenCode handoff workflow
+alwaysApply: true
+---
+
+# Review handoff
+
+## Agent split
+
+| Agent | Role |
+|-------|------|
+| **Cursor** | Review-only: read diff, report findings, update `docs/context.md` |
+| **OpenCode** | Execute: implement fixes, run tests, commit when asked |
+
+Cursor must not re-implement what OpenCode owns unless user explicitly switches role.
+
+## Review output
+
+After every review, update the local **`docs/context.md`** (gitignored) using the template sections in **`docs/context.template.md`**:
+
+1. **Status** — approve / changes requested / blocked
+2. **Scope** — files or feature area reviewed
+3. **Findings** — numbered, severity tagged (`blocker` / `major` / `minor`)
+4. **Tasks for OpenCode** — copy-paste ready checklist
+5. **Verify** — exact commands to run after fix
+
+Keep findings actionable: file path, line hint, expected fix. No prose essays.
+
+## OpenCode prompt prefix
+
+When user copies context, they paste:
+
+```
+Read docs/context.md and AGENTS.md. Execute only the Tasks section. Run Verify commands before done.
+```

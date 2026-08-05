@@ -13,5 +13,6 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 
-# Packaged defaults generated from sentinel.toml.example before install/build
-src/sentinel_ai/sentinel.toml
+# Agent handoff scratch — copy-paste to OpenCode, not product code
+docs/context.md
+
