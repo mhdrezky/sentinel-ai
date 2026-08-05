@@ -219,28 +219,42 @@ CVE checks by default (`trivy.enabled = true` but binary not found).
 
 ## Installing into a repository
 
-Sentinel-AI needs to be on `PATH`, then:
+Sentinel-AI must be on `PATH` (`sentinel-ai doctor`). Then wire Husky in the
+project you want to protect:
+
+**1. Install and initialise Husky** (from the repository root):
 
 ```bash
+npm install --save-dev husky
 npx husky init
 ```
 
-```bash
-sentinel-ai install-hook
-```
+`husky init` creates `.husky/pre-commit` with a sample command. **Do not run**
+`sentinel-ai install-hook` here — it refuses to overwrite an existing hook.
 
-That writes `.husky/pre-commit`:
+**2. Set the pre-commit hook.**
+
+Replace the contents of `.husky/pre-commit` with:
 
 ```sh
-#!/usr/bin/env sh
 sentinel-ai check || exit 1
 ```
 
-Verify the local environment at any time:
+Or append that line if you already maintain other checks in the same file.
+
+**3. Verify** from the repository root:
 
 ```bash
 sentinel-ai doctor
 sentinel-ai config
+git add .
+git commit -m "test: sentinel-ai hook"
+```
+
+On Windows, edit with:
+
+```powershell
+notepad .husky\pre-commit
 ```
 
 ## Configuration
@@ -292,7 +306,7 @@ sentinel-ai check --no-ai      skip the AI review stage
 sentinel-ai check --strict     block when Sentinel-AI or the model server fails
 sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai config             show the active organisation configuration
-sentinel-ai install-hook       write the Husky pre-commit hook
+sentinel-ai install-hook       append hook (prefer manual edit if pre-commit exists)
 ```
 
 ## Failure behaviour
