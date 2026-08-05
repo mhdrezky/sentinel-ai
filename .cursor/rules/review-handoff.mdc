@@ -9,22 +9,45 @@ alwaysApply: true
 
 | Agent | Role |
 |-------|------|
-| **Cursor** | Review-only: read diff, report findings, update `docs/context.md` |
-| **OpenCode** | Execute: implement fixes, run tests, commit when asked |
+| **Cursor** | Review-only: read **staged** diff, report findings, update `docs/context.md` |
+| **OpenCode** | Execute: implement fixes, run tests, **stage** changes; commit only when user asks |
 
 Cursor must not re-implement what OpenCode owns unless user explicitly switches role.
+
+## Review basis: staged index (not commits)
+
+Mirror the product: review what is **`git add`ed**, not what is already committed.
+
+**Reviewer reads:**
+
+```powershell
+git diff --staged --stat
+git diff --staged
+```
+
+Do **not** use as primary review input:
+
+- `git log` / commit messages
+- `git diff` (unstaged worktree only)
+- `git diff main...HEAD` (commit range)
+
+If nothing is staged, ask the user to stage first (`git add …`) or state that review is empty.
 
 ## Review output
 
 After every review, update the local **`docs/context.md`** (gitignored) using the template sections in **`docs/context.template.md`**:
 
 1. **Status** — approve / changes requested / blocked
-2. **Scope** — files or feature area reviewed
+2. **Scope** — files in the staged diff (from `--stat`)
 3. **Findings** — numbered, severity tagged (`blocker` / `major` / `minor`)
 4. **Tasks for OpenCode** — copy-paste ready checklist
 5. **Verify** — exact commands to run after fix
 
-Keep findings actionable: file path, line hint, expected fix. No prose essays.
+Include staged file list in Meta. Keep findings actionable: file path, line hint, expected fix. No prose essays.
+
+## Executor staging
+
+OpenCode finishes by staging fixes (`git add …`). User re-runs Cursor review on the updated staged diff. Commit only when the user explicitly requests it.
 
 ## OpenCode prompt prefix
 

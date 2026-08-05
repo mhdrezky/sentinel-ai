@@ -6,8 +6,8 @@ Instructions for AI agents working in this repository. **Read this file and `.cu
 
 | Agent | When | Do | Don't |
 |-------|------|-----|-------|
-| **OpenCode** (executor) | Implement, fix, test | Follow tasks in `docs/context.md`, run verify commands | Re-architect without approval |
-| **Cursor** (reviewer) | Review diffs | Update `docs/context.md`, list blockers | Implement unless user asks |
+| **OpenCode** (executor) | Implement, fix, test, **stage** | Follow tasks in `docs/context.md`, run verify, `git add` changed files | Commit unless user asks |
+| **Cursor** (reviewer) | Review **staged** diff | `git diff --staged`, update `docs/context.md` | Implement unless user asks |
 
 Default handoff: Cursor reviews → user copies `docs/context.md` → OpenCode executes.
 
@@ -78,15 +78,23 @@ Windows PowerShell 5.x: use `; if ($?) { … }` not `&&`.
 
 ## Review workflow
 
-1. Reviewer reads `git diff` (not full repo unless needed).
-2. Reviewer updates local **`docs/context.md`** (gitignored; copy from `docs/context.template.md`) with findings + tasks.
-3. User copies `docs/context.md` to OpenCode with:
+1. OpenCode implements fixes and runs verify, then **`git add`** the changed files.
+2. Reviewer reads **`git diff --staged`** (not commits, not unstaged diff):
+
+   ```powershell
+   git diff --staged --stat
+   git diff --staged
+   ```
+
+3. Reviewer updates local **`docs/context.md`** (gitignored; copy from `docs/context.template.md`) with findings + tasks.
+4. User copies `docs/context.md` to OpenCode with:
 
    ```
    Read docs/context.md and AGENTS.md. Execute only the Tasks section. Run Verify commands before done.
    ```
 
-4. OpenCode fixes, runs verify, marks tasks done in context (optional).
+5. OpenCode fixes, runs verify, **stages** again. Repeat until review approves.
+6. User commits when satisfied — neither agent commits by default.
 
 ## Files not to recreate
 

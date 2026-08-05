@@ -43,17 +43,17 @@ Write-Host ""
 $uv = Get-Command uv -ErrorAction SilentlyContinue
 if (-not $uv) {
     Write-Step "uv not found — installing via Astral installer"
-    $uvInstAllPath = "$env:USERPROFILE\.cargo\bin"
+    $uvInstallPath = "$env:USERPROFILE\.cargo\bin"
     iex ((Invoke-WebRequest -Uri "https://astral.sh/uv/install.ps1" -UseBasicParsing).Content)
 
     # Astral installer writes to PATH but may not update the current process
     $uv = Get-Command uv -ErrorAction SilentlyContinue
     if (-not $uv) {
-        Write-Step "Refreshing PATH to include $($uvInstAllPath)"
+        Write-Step "Refreshing PATH to include $($uvInstallPath)"
         $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-        if (-not ($currentPath -split ';' | Where-Object { $_ -eq $uvInstAllPath })) {
-            [Environment]::SetEnvironmentVariable("Path", "$uvInstAllPath;$currentPath", "User")
-            $env:Path = "$uvInstAllPath;$currentPath"
+        if (-not ($currentPath -split ';' | Where-Object { $_ -eq $uvInstallPath })) {
+            [Environment]::SetEnvironmentVariable("Path", "$uvInstallPath;$currentPath", "User")
+            $env:Path = "$uvInstallPath;$currentPath"
         }
         $uv = Get-Command uv -ErrorAction SilentlyContinue
     }
@@ -76,10 +76,8 @@ if ($LASTEXITCODE -ne 0) { throw "uv tool install failed with exit code $LASTEXI
 # --- 3. Verify sentinel-ai on PATH ---
 $cli = Get-Command sentinel-ai -ErrorAction SilentlyContinue
 if (-not $cli) {
-    # uv tool installs to %USERPROFILE%\.cargo\bin or %USERPROFILE%\.local\bin
     $toolBin = "$env:USERPROFILE\.local\bin"
-    $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($currentPath -split ';' | Where-Object { $_ -eq $toolBin }) {
+    if (Test-Path $toolBin) {
         $env:Path = "$toolBin;$env:Path"
         $cli = Get-Command sentinel-ai -ErrorAction SilentlyContinue
     }
@@ -101,7 +99,7 @@ if (-not (Test-Path $CONFIG_FILE)) {
         Write-Ok "Config fetched from $tomlUrl"
     } catch {
         Write-Warn "Could not fetch sentinel.toml: $_"
-        Write-Step "Falling back to default bundled config"
+        # keep in sync with src/sentinel_ai/sentinel.toml
         @"
 # Sentinel-AI configuration
 # Edit this file to point [ai].base_url and [ai].model to your AI server.

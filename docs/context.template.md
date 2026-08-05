@@ -12,8 +12,20 @@
 | **Date** | YYYY-MM-DD |
 | **Reviewer** | Cursor / human |
 | **Branch** | `main` |
+| **Review basis** | `git diff --staged` |
+| **Staged files** | from `git diff --staged --stat` |
 | **Status** | `approve` \| `changes-requested` \| `blocked` |
 | **Scope** | e.g. install.ps1, README, release workflow |
+
+---
+
+## Staged diff (reference)
+
+```powershell
+git diff --staged --stat
+```
+
+<!-- Paste stat output or list files here when handing off -->
 
 ---
 

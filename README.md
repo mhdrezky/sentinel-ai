@@ -64,7 +64,7 @@ staying silent about it.
 ## Development
 
 Bundled defaults come from [`src/sentinel_ai/sentinel.toml`](src/sentinel_ai/sentinel.toml)
-( tracked in git ).
+(tracked in git).
 Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
 `install.ps1`).
 
@@ -121,7 +121,7 @@ irm https://raw.githubusercontent.com/mhdrezky/sentinel-ai/main/scripts/install.
 ```
 
 Then in the protected project, only Husky is needed (the installer writes the
-hook when `-RepoPath` is passed):
+hook when `$env:SENTINEL_REPO_PATH` is set):
 
 ```sh
 #!/usr/bin/env sh
