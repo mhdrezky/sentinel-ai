@@ -47,7 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
         "doctor", help="verify Trivy and the on-prem model server"
     )
     doctor.add_argument(
-        "--repo", type=Path, default=None, help="repository to read config from"
+        "--repo", type=Path, default=None, help="repository root (default: cwd)"
     )
     doctor.add_argument("--no-color", action="store_true")
 
@@ -65,9 +65,8 @@ def build_parser() -> argparse.ArgumentParser:
         "config", help="show the active organisation configuration"
     )
     config.add_argument(
-        "--repo", type=Path, default=None, help="repository context (default: cwd)"
+        "--json", action="store_true", help="emit machine-readable output"
     )
-    config.add_argument("--json", action="store_true", help="emit machine-readable output")
     config.add_argument("--no-color", action="store_true")
 
     # Allow bare `sentinel-ai` with check flags, so the hook needs no subcommand.
@@ -128,11 +127,12 @@ def _check(args: argparse.Namespace) -> int:
         return EXIT_ERROR if args.strict else EXIT_PASS
 
     try:
-        settings = Settings.load(root)
+        settings = Settings.load()
     except ConfigError as exc:
         reporter.error(str(exc))
         return EXIT_ERROR
 
+    settings.repo_root = root
     settings.verbose = settings.verbose or args.verbose
     if args.no_ai:
         settings.ai.enabled = False
@@ -248,7 +248,7 @@ def _doctor(args: argparse.Namespace) -> int:
         root = Path.cwd()
         reporter.warn(f"not in a git repository; using {root}")
 
-    settings = Settings.load(root)
+    settings = Settings.load()
     reporter.info(f"[bold]Sentinel-AI {__version__}[/bold]")
     reporter.info(f"  repo:   {root}")
     reporter.info(
@@ -280,14 +280,9 @@ def _doctor(args: argparse.Namespace) -> int:
 
 def _config(args: argparse.Namespace) -> int:
     reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
-    try:
-        root = repo_root(getattr(args, "repo", None))
-    except GitError:
-        root = Path.cwd()
-        reporter.warn(f"not in a git repository; using {root}")
 
     try:
-        settings = Settings.load(root)
+        settings = Settings.load()
     except ConfigError as exc:
         reporter.error(str(exc))
         return EXIT_ERROR

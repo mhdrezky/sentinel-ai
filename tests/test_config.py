@@ -18,13 +18,8 @@ def no_host_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("SENTINEL_AI_MODEL", raising=False)
 
 
-def test_bundled_config_provides_ai_without_repo_file(
-    tmp_path: Path, no_host_config: None
-) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-
-    settings = Settings.load(repo)
+def test_bundled_defaults(no_host_config: None) -> None:
+    settings = Settings.load()
 
     assert settings.ai.base_url == "http://localhost:8000/v1"
     assert settings.ai.model == "local-model"
@@ -34,9 +29,7 @@ def test_bundled_config_provides_ai_without_repo_file(
 def test_global_config_overrides_bundled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
 ) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    global_config = tmp_path / "sentinel-global.toml"
+    global_config = tmp_path / "override.toml"
     global_config.write_text(
         '[policy]\nblock_at_or_above = "critical"\n'
         '[ai]\nbase_url = "http://override/v1"\nmodel = "override-model"\n',
@@ -44,7 +37,7 @@ def test_global_config_overrides_bundled(
     )
     monkeypatch.setenv("SENTINEL_CONFIG", str(global_config))
 
-    settings = Settings.load(repo)
+    settings = Settings.load()
 
     assert settings.policy.block_at_or_above.value == "critical"
     assert settings.ai.base_url == "http://override/v1"
@@ -54,8 +47,6 @@ def test_global_config_overrides_bundled(
 def test_host_config_overrides_bundled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
 ) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
     host_config = tmp_path / ".sentinel-ai" / "config.toml"
     host_config.parent.mkdir(parents=True)
     host_config.write_text(
@@ -64,7 +55,7 @@ def test_host_config_overrides_bundled(
     )
     monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
 
-    settings = Settings.load(repo)
+    settings = Settings.load()
 
     assert settings.ai.base_url == "http://host-override/v1"
     assert settings.ai.model == "host-model"
@@ -73,9 +64,7 @@ def test_host_config_overrides_bundled(
 def test_env_overrides_global_ai_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
 ) -> None:
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    global_config = tmp_path / "sentinel-global.toml"
+    global_config = tmp_path / "override.toml"
     global_config.write_text(
         '[ai]\nbase_url = "http://global/v1"\nmodel = "global-model"\n',
         encoding="utf-8",
@@ -84,7 +73,7 @@ def test_env_overrides_global_ai_config(
     monkeypatch.setenv("SENTINEL_AI_BASE_URL", "http://env/v1")
     monkeypatch.setenv("SENTINEL_AI_MODEL", "env-model")
 
-    settings = Settings.load(repo)
+    settings = Settings.load()
 
     assert settings.ai.base_url == "http://env/v1"
     assert settings.ai.model == "env-model"
@@ -105,7 +94,7 @@ def test_host_config_path_location() -> None:
 def test_config_command_json(
     capsys: pytest.CaptureFixture[str], no_host_config: None
 ) -> None:
-    exit_code = main(["config", "--json", "--repo", str(Path.cwd())])
+    exit_code = main(["config", "--json"])
     assert exit_code == 0
     payload = __import__("json").loads(capsys.readouterr().out)
     assert payload["ai"]["base_url"] == "http://localhost:8000/v1"

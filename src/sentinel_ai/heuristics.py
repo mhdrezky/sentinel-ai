@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from .config import PolicyConfig
+from .config import PolicyConfig, host_config_path
 from .data.popular_packages import popular_for
 from .manifests import ParsedManifest
 from .models import (
@@ -110,7 +110,7 @@ def _check_denylist(change: PackageChange, policy: PolicyConfig) -> Finding | No
         title=f"{change.name} is on the organisation denylist",
         detail=(
             f"`{change.name}` is explicitly banned by the organisation policy "
-            f"in sentinel.toml."
+            f"in {host_config_path()}."
         ),
         package=change.coordinate,
         remediation="Remove the dependency, or raise an exception with the security team.",
@@ -233,7 +233,7 @@ def _check_install_script(
         package=change.coordinate,
         remediation=(
             "Read the package's install script. If it is legitimate, add "
-            f"`{change.name}` to `allowlist` in sentinel.toml "
+            f"`{change.name}` to `allowlist` in {host_config_path()} "
             f"(see `sentinel-ai config`)."
         ),
     )
@@ -294,15 +294,6 @@ def _check_root_scripts(manifests: dict[str, ParsedManifest]) -> list[Finding]:
                 )
             )
     return findings
-
-
-def describe_script_risk(script_body: str) -> list[str]:
-    """Public helper — the AI layer reuses this to pre-tag scripts it sends."""
-    return [
-        reason
-        for pattern, reason in _SUSPICIOUS_SCRIPT_PATTERNS
-        if pattern.search(script_body)
-    ]
 
 
 def _collect_install_script_packages(

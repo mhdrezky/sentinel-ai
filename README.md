@@ -53,7 +53,7 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
 | Source outside the registry | `HIGH` | `git+`, `http(s)://`, `file:`, `github:` |
 | Suspicious project lifecycle script | `CRITICAL` | Network fetch, `eval`, base64, credential paths in `postinstall` etc. |
 | No version constraint | `MEDIUM` | `*`, `latest` |
-| Denylisted package | `CRITICAL` | From organisation `sentinel.toml` |
+| Denylisted package | `CRITICAL` | From organisation config |
 
 Supported ecosystems: **npm**, **PyPI**, **NuGet**, **Composer**.
 
@@ -98,20 +98,6 @@ Run it against a repository without installing anything:
 ```bash
 uv run sentinel-ai check --repo /path/to/project --verbose
 ```
-
-## Building the binary
-
-```bash
-uv run pyinstaller sentinel.spec --clean --noconfirm
-```
-
-Produces a single `dist/sentinel-ai` (or `.exe`, ~16 MB) with no runtime
-dependency on Python.
-
-One-file mode costs roughly a second of startup on each run, because the
-bootloader unpacks to a temp directory. If that becomes the dominant cost in
-the hook, switch the spec to one-dir mode (`COLLECT`) — startup drops to about
-0.3 s at the price of distributing a folder instead of a file.
 
 ## Installing for developers (Windows)
 

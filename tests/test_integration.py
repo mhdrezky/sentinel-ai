@@ -108,15 +108,17 @@ class TestStagedScanning:
 
 class TestPolicyConfig:
     def test_allowlist_in_config_unblocks(self, repo, tmp_path, monkeypatch):
-        config = tmp_path / "sentinel.toml"
+        config = tmp_path / "config.toml"
         config.write_text("[policy]\nallowlist = ['expres']\n", encoding="utf-8")
         monkeypatch.setenv("SENTINEL_CONFIG", str(config))
         write(repo, "package.json", {"dependencies": {"expres": "4.0.0"}})
         git(repo, "add", "-A")
         assert run(repo) == EXIT_PASS
 
-    def test_denylist_blocks_an_otherwise_clean_package(self, repo, tmp_path, monkeypatch):
-        config = tmp_path / "sentinel.toml"
+    def test_denylist_blocks_an_otherwise_clean_package(
+        self, repo, tmp_path, monkeypatch
+    ):
+        config = tmp_path / "config.toml"
         config.write_text("[policy]\ndenylist = ['axios']\n", encoding="utf-8")
         monkeypatch.setenv("SENTINEL_CONFIG", str(config))
         write(repo, "package.json", {"dependencies": {"axios": "1.7.2"}})
@@ -126,10 +128,8 @@ class TestPolicyConfig:
     def test_lower_threshold_promotes_warnings_to_blocks(
         self, repo, tmp_path, monkeypatch
     ):
-        config = tmp_path / "sentinel.toml"
-        config.write_text(
-            "[policy]\nblock_at_or_above = 'medium'\n", encoding="utf-8"
-        )
+        config = tmp_path / "config.toml"
+        config.write_text("[policy]\nblock_at_or_above = 'medium'\n", encoding="utf-8")
         monkeypatch.setenv("SENTINEL_CONFIG", str(config))
         # An unpinned version is MEDIUM: a warning by default, blocking here.
         write(repo, "package.json", {"dependencies": {"some-lib": "*"}})

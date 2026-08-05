@@ -89,14 +89,10 @@ class Settings(BaseModel):
     verbose: bool = False
 
     @classmethod
-    def load(cls, repo_root: Path | None = None) -> Settings:
-        root = (repo_root or Path.cwd()).resolve()
-        data: dict = {"repo_root": root}
-
+    def load(cls) -> Settings:
+        data: dict = {}
         for config_path in _global_config_paths():
             data = _deep_merge(data, _read_toml(config_path))
-
-        data["repo_root"] = root
 
         settings = cls.model_validate(data)
         settings._apply_env_overrides()
@@ -168,11 +164,7 @@ def _deep_merge(base: dict, overlay: dict) -> dict:
     """Merge nested dicts so `[ai]` in one file can override just `base_url`."""
     result = dict(base)
     for key, value in overlay.items():
-        if (
-            key in result
-            and isinstance(result[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value

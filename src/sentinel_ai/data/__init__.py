@@ -1,1 +1,1 @@
-"""Static reference data bundled into the binary."""
+"""Static reference data bundled with the package."""
