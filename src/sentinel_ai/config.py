@@ -155,7 +155,9 @@ def _read_toml(path: Path) -> dict:
     if not path.is_file():
         return {}
     try:
-        return tomllib.loads(path.read_text(encoding="utf-8"))
+        # utf-8-sig, not utf-8: Windows PowerShell 5.1 `Set-Content -Encoding utf8`
+        # writes a BOM, and a stray ﻿ makes tomllib fail at line 1, column 1.
+        return tomllib.loads(path.read_text(encoding="utf-8-sig"))
     except (tomllib.TOMLDecodeError, OSError) as exc:
         raise ConfigError(f"Could not read {path}: {exc}") from exc
 

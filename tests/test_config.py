@@ -61,6 +61,23 @@ def test_host_config_overrides_bundled(
     assert settings.ai.model == "host-model"
 
 
+def test_host_config_with_utf8_bom(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
+) -> None:
+    """install.ps1 on Windows PowerShell 5.1 used to write a BOM; still parse it."""
+    host_config = tmp_path / ".sentinel-ai" / "config.toml"
+    host_config.parent.mkdir(parents=True)
+    host_config.write_text(
+        '[ai]\nbase_url = "http://bom-host/v1"\n',
+        encoding="utf-8-sig",
+    )
+    monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
+
+    settings = Settings.load()
+
+    assert settings.ai.base_url == "http://bom-host/v1"
+
+
 def test_env_overrides_global_ai_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
 ) -> None:

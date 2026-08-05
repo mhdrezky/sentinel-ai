@@ -38,6 +38,13 @@ function Write-Step([string] $Msg) { Write-Host " ==> $Msg" -ForegroundColor Cya
 function Write-Ok([string] $Msg)   { Write-Host " ok  $Msg" -ForegroundColor Green }
 function Write-Warn([string] $Msg){ Write-Host " !   $Msg" -ForegroundColor Yellow }
 
+function Write-Utf8NoBom([string] $Path, [string] $Content) {
+    # Set-Content -Encoding utf8 emits a BOM on Windows PowerShell 5.1, and Python's
+    # tomllib rejects the leading U+FEFF with "Invalid statement (at line 1, column 1)".
+    if (-not $Content.EndsWith("`n")) { $Content += "`r`n" }
+    [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Get-LatestReleaseTag {
     $headers = @{ "User-Agent" = "sentinel-ai-installer" }
     try {
@@ -122,14 +129,17 @@ if (-not (Test-Path $CONFIG_FILE)) {
         $tomlUrl = "https://raw.githubusercontent.com/$GITHUB_REPO/$configTag/src/sentinel_ai/sentinel.toml"
         try {
             Write-Step "Fetching config from release $configTag"
-            $toml = irm $tomlUrl
-            $toml | Set-Content -Path $CONFIG_FILE -Encoding utf8
+            $toml = (Invoke-WebRequest -Uri $tomlUrl -UseBasicParsing).Content
+            if (-not $toml -or -not ($toml -match '(?m)^\s*\[policy\]')) {
+                throw "response from $tomlUrl is not a Sentinel-AI config"
+            }
+            Write-Utf8NoBom -Path $CONFIG_FILE -Content $toml
             Write-Ok "Config fetched from $tomlUrl"
         } catch {
             Write-Warn "Could not fetch sentinel.toml: $_"
             Write-Step "Falling back to default bundled config"
             # keep in sync with src/sentinel_ai/sentinel.toml
-            @"
+            $fallbackToml = @"
 # Sentinel-AI configuration
 # Edit this file to point [ai].base_url and [ai].model to your AI server.
 
@@ -155,7 +165,8 @@ binary_path = "trivy"
 timeout_seconds = 60.0
 skip_db_update = false
 offline = false
-"@ | Set-Content -Path $CONFIG_FILE -Encoding utf8
+"@
+            Write-Utf8NoBom -Path $CONFIG_FILE -Content $fallbackToml
             Write-Ok "Default config created"
         }
     }
