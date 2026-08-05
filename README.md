@@ -53,7 +53,7 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
 | Source outside the registry | `HIGH` | `git+`, `http(s)://`, `file:`, `github:` |
 | Suspicious project lifecycle script | `CRITICAL` | Network fetch, `eval`, base64, credential paths in `postinstall` etc. |
 | No version constraint | `MEDIUM` | `*`, `latest` |
-| Denylisted package | `CRITICAL` | From `.sentinel.toml` |
+| Denylisted package | `CRITICAL` | From organisation `sentinel.toml` |
 
 Supported ecosystems: **npm**, **PyPI**, **NuGet**, **Composer**.
 
@@ -63,16 +63,36 @@ staying silent about it.
 
 ## Development
 
+Organisation config template: [`sentinel.toml.example`](sentinel.toml.example).
+Copy to `sentinel.toml` locally and edit — that file is not committed.
+When building or installing the CLI, sync it into the package first:
+
+```powershell
+Copy-Item sentinel.toml.example sentinel.toml
+# edit sentinel.toml — set base_url, model, allowlist, etc.
+.\scripts\sync-config.ps1
+```
+
 ```bash
-uv sync
+uv sync --group dev
 ```
 
 ```bash
 uv run pytest
 ```
 
+On Windows, if `uv run pytest` fails with a trampoline error, recreate the
+virtual environment (`Remove-Item -Recurse -Force .venv` then `uv sync
+--group dev`) or run `uv run python -m pytest` instead.
+
 ```bash
+# bash / PowerShell 7+
 uv run ruff check . && uv run ruff format --check .
+```
+
+```powershell
+# Windows PowerShell 5.x (`&&` is not supported)
+uv run ruff check .; if ($?) { uv run ruff format --check . }
 ```
 
 Run it against a repository without installing anything:
@@ -94,6 +114,34 @@ One-file mode costs roughly a second of startup on each run, because the
 bootloader unpacks to a temp directory. If that becomes the dominant cost in
 the hook, switch the spec to one-dir mode (`COLLECT`) — startup drops to about
 0.3 s at the price of distributing a folder instead of a file.
+
+## Installing for developers (Windows)
+
+  Config template: [`sentinel.toml.example`](sentinel.toml.example). Each developer
+  copies it to `sentinel.toml` locally — `install.ps1` does this automatically.
+
+```powershell
+git clone <internal-url>/sentinel-ai.git
+cd sentinel-ai
+.\scripts\install.ps1 -Repo D:\Repositories\your-project
+```
+
+The installer auto-detects `uv`, installs it when missing, installs Python 3.13,
+and puts `sentinel-ai` on PATH. Re-run anytime to upgrade.
+
+Verify:
+
+```powershell
+sentinel-ai doctor
+```
+
+Then in the protected project, only Husky is needed (the installer writes the
+hook when `-Repo` is passed):
+
+```sh
+#!/usr/bin/env sh
+sentinel-ai check || exit 1
+```
 
 ## Installing into a repository
 
@@ -118,19 +166,43 @@ Verify the local environment at any time:
 
 ```bash
 sentinel-ai doctor
+sentinel-ai config
 ```
 
 ## Configuration
 
-Copy `.sentinel.toml.example` to `.sentinel.toml` in the protected repository
-and commit it — the policy deserves review like any other code. Every value has
-a working default, so the file is optional.
+All organisation settings live in local `sentinel.toml` (from
+[`sentinel.toml.example`](sentinel.toml.example)). Protected repositories only
+need the Husky hook.
 
-Environment variables override the file, which is what CI and agent runners
-should use:
+Inspect the active configuration:
+
+```bash
+sentinel-ai config
+sentinel-ai config --json
+```
+
+| Source | Purpose |
+|---|---|
+| `sentinel.toml.example` | **Tracked template** — copy to `sentinel.toml` locally |
+| `sentinel.toml` | **Local config** (gitignored) — AI server, Trivy, policy |
+| `SENTINEL_CONFIG` / `~/.config/sentinel-ai/config.toml` | Optional machine-wide override |
+| `SENTINEL_*` env vars | Override for CI/agents |
+
+Precedence (low → high): defaults → local `sentinel.toml` → `~/.config`
+/ `SENTINEL_CONFIG` → env vars.
+
+First-time setup:
+
+```powershell
+Copy-Item sentinel.toml.example sentinel.toml
+# edit sentinel.toml
+.\scripts\install.ps1
+```
 
 | Variable | Effect |
 |---|---|
+| `SENTINEL_CONFIG` | Path to a global config override file |
 | `SENTINEL_AI_BASE_URL` | On-prem model server root (OpenAI-compatible) |
 | `SENTINEL_AI_MODEL` | Model name on that server |
 | `SENTINEL_AI_API_KEY` | Bearer token, if the server requires one |
@@ -148,6 +220,7 @@ sentinel-ai check --json       machine-readable report on stdout
 sentinel-ai check --no-ai      skip the AI review stage
 sentinel-ai check --strict     block when Sentinel-AI or the model server fails
 sentinel-ai doctor             check Trivy and the on-prem model server
+sentinel-ai config             show the active organisation configuration
 sentinel-ai install-hook       write the Husky pre-commit hook
 ```
 

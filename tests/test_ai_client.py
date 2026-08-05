@@ -76,6 +76,33 @@ class TestParseVerdict:
         assert verdict.risk_level is Severity.NONE
         assert verdict.packages == []
 
+    def test_reasoning_field_is_used_when_content_empty(self):
+        payload = dict(VALID_VERDICT, summary="from reasoning field")
+        content = json.dumps(payload)
+        assert parse_verdict(content).summary == "from reasoning field"
+
+    def test_reasoning_field_via_message_content(self):
+        from sentinel_ai.ai.client import _message_content
+
+        message = {"content": "", "reasoning": json.dumps(VALID_VERDICT)}
+        assert parse_verdict(_message_content(message)).risk_level is Severity.HIGH
+
+    def test_qwen_think_tags_are_stripped(self):
+        think_open, think_close = "<" + "think>", "</" + "think>"
+        content = (
+            f"{think_open}Let me review this carefully.{think_close}\n"
+            f"{json.dumps(VALID_VERDICT)}"
+        )
+        assert parse_verdict(content).risk_level is Severity.HIGH
+
+    def test_doubled_opening_brace_from_vllm(self):
+        payload = json.dumps(VALID_VERDICT)
+        assert parse_verdict("{{" + payload[1:]).risk_level is Severity.HIGH
+
+    def test_error_includes_response_preview(self):
+        with pytest.raises(AIUnavailable, match="got: 'plain text only'"):
+            parse_verdict("plain text only")
+
     @pytest.mark.parametrize("content", ["", "I cannot help with that.", "[1, 2, 3]"])
     def test_unusable_responses_raise(self, content):
         with pytest.raises(AIUnavailable):
@@ -134,6 +161,16 @@ class TestClientTransport:
         AIClient(config).analyse(self._changes(), [], {})
         request = httpx_mock.get_requests()[0]
         assert request.headers["Authorization"] == "Bearer secret-token"
+
+    def test_qwen_thinking_is_disabled_by_default(self, httpx_mock):
+        httpx_mock.add_response(
+            json={"choices": [{"message": {"content": '{"risk_level":"none"}'}}]}
+        )
+        AIClient(self._config()).analyse(self._changes(), [], {})
+        payload = json.loads(httpx_mock.get_requests()[0].content)
+        assert payload["extra_body"] == {
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
 
 
 class TestPromptSafety:

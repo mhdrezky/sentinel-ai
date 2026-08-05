@@ -10,13 +10,14 @@ every commit, and third-party import cost is latency a developer feels.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
 
 from . import __version__
 from .ai import AIClient, AIUnavailable
-from .config import ConfigError, Settings
+from .config import ConfigError, Settings, resolved_config_paths
 from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide, requires_ai_review
 from .gitdiff import GitError, repo_root
 from .manifests import ParsedManifest
@@ -42,7 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     check = subparsers.add_parser("check", help="scan a change set (default)")
     _add_check_arguments(check)
 
-    doctor = subparsers.add_parser("doctor", help="verify Trivy and the on-prem model server")
+    doctor = subparsers.add_parser(
+        "doctor", help="verify Trivy and the on-prem model server"
+    )
     doctor.add_argument(
         "--repo", type=Path, default=None, help="repository to read config from"
     )
@@ -57,6 +60,15 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument(
         "--force", action="store_true", help="overwrite an existing hook"
     )
+
+    config = subparsers.add_parser(
+        "config", help="show the active organisation configuration"
+    )
+    config.add_argument(
+        "--repo", type=Path, default=None, help="repository context (default: cwd)"
+    )
+    config.add_argument("--json", action="store_true", help="emit machine-readable output")
+    config.add_argument("--no-color", action="store_true")
 
     # Allow bare `sentinel-ai` with check flags, so the hook needs no subcommand.
     _add_check_arguments(parser)
@@ -100,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor(args)
     if args.command == "install-hook":
         return _install_hook(args)
+    if args.command == "config":
+        return _config(args)
     return _check(args)
 
 
@@ -261,6 +275,77 @@ def _doctor(args: argparse.Namespace) -> int:
         reporter.info(f"  ai:     [red]unavailable[/red] — {exc}")
         return EXIT_BLOCK
 
+    return EXIT_PASS
+
+
+def _config(args: argparse.Namespace) -> int:
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    try:
+        root = repo_root(getattr(args, "repo", None))
+    except GitError:
+        root = Path.cwd()
+        reporter.warn(f"not in a git repository; using {root}")
+
+    try:
+        settings = Settings.load(root)
+    except ConfigError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    sources = resolved_config_paths()
+    payload = {
+        "sources": [str(path) for path in sources],
+        "policy": {
+            "block_at_or_above": settings.policy.block_at_or_above.value,
+            "block_on_install_scripts": settings.policy.block_on_install_scripts,
+            "block_on_nonregistry_source": settings.policy.block_on_nonregistry_source,
+            "allowlist": settings.policy.allowlist,
+            "denylist": settings.policy.denylist,
+        },
+        "ai": {
+            "enabled": settings.ai.enabled,
+            "base_url": settings.ai.base_url,
+            "model": settings.ai.model,
+            "max_output_tokens": settings.ai.max_output_tokens,
+            "fail_open": settings.ai.fail_open,
+        },
+        "trivy": {
+            "enabled": settings.trivy.enabled,
+            "binary_path": settings.trivy.binary_path,
+        },
+    }
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return EXIT_PASS
+
+    reporter.info(f"[bold]Sentinel-AI {__version__}[/bold]")
+    reporter.info("  configuration sources:")
+    if sources:
+        for path in sources:
+            reporter.info(f"    [cyan]{path}[/cyan]")
+    else:
+        reporter.warn("    no config file found — using built-in defaults")
+
+    reporter.info(
+        f"  policy: block at or above {settings.policy.block_at_or_above.value}"
+    )
+    if settings.policy.allowlist:
+        reporter.info(f"          allowlist: {', '.join(settings.policy.allowlist)}")
+    if settings.policy.denylist:
+        reporter.info(f"          denylist: {', '.join(settings.policy.denylist)}")
+
+    if settings.ai.enabled:
+        reporter.info(f"  ai:     {settings.ai.base_url}")
+        reporter.info(f"          model {settings.ai.model}")
+    else:
+        reporter.info("  ai:     [dim]disabled[/dim]")
+
+    reporter.info(f"  trivy:  `{settings.trivy.binary_path}`")
+    reporter.info(
+        "[dim]Edit sentinel.toml (copy from sentinel.toml.example), then re-run "
+        "scripts/install.ps1 to roll out changes.[/dim]"
+    )
     return EXIT_PASS
 
 

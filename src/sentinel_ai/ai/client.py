@@ -62,6 +62,11 @@ class AIClient:
             # Honoured by vLLM and Ollama; servers that do not know it ignore it.
             "response_format": {"type": "json_object"},
         }
+        if not self.config.enable_thinking:
+            # Qwen3 defaults to a thinking template; reasoning text breaks JSON parsing.
+            payload["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
 
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
@@ -88,11 +93,19 @@ class AIClient:
 
         try:
             body = response.json()
-            content = body["choices"][0]["message"]["content"]
+            choice = body["choices"][0]
+            content = _message_content(choice["message"])
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             raise AIUnavailable(
                 f"model server returned an unexpected response shape: {exc}"
             ) from exc
+
+        if not content.strip() and choice.get("finish_reason") == "length":
+            raise AIUnavailable(
+                "model response was truncated before producing JSON "
+                f"(max_tokens={self.config.max_output_tokens}); "
+                "raise ai.max_output_tokens in config"
+            )
 
         return parse_verdict(content)
 
@@ -121,14 +134,24 @@ def parse_verdict(content: str) -> AIVerdict:
     Small models wrap JSON in prose or markdown fences even when told not to,
     so the object is extracted rather than assuming a clean payload.
     """
-    raw = _extract_json_object(content)
+    prepared = _prepare_model_content(content)
+    raw = _extract_json_object(prepared)
     if raw is None:
-        raise AIUnavailable("model response contained no JSON object")
+        preview = prepared[:200].replace("\n", " ").strip()
+        detail = f" (got: {preview!r})" if preview else ""
+        raise AIUnavailable(f"model response contained no JSON object{detail}")
 
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
+        # vLLM + Qwen3.6 occasionally prefixes JSON with an extra `{`.
+        if raw.startswith("{{") and not raw.startswith("{{{"):
+            try:
+                data = json.loads(raw[1:])
+            except json.JSONDecodeError:
+                raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
+        else:
+            raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
         raise AIUnavailable("model response JSON was not an object")
@@ -156,6 +179,41 @@ def _clamp_confidence(value: object) -> float:
 
 
 _FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+_THINK_RE = re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE)
+
+
+def _message_content(message: object) -> str:
+    """Normalise OpenAI-compatible message shapes into plain text."""
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content") or ""
+    if isinstance(content, list):
+        content = "".join(
+            part.get("text", "")
+            for part in content
+            if isinstance(part, dict) and part.get("type") == "text"
+        )
+    text = str(content).strip()
+    if text:
+        return text
+    # vLLM + Qwen3 may put the answer in `reasoning` or `reasoning_content`
+    # when thinking mode is active, leaving `content` empty.
+    for key in ("reasoning_content", "reasoning"):
+        fallback = str(message.get(key) or "").strip()
+        if fallback:
+            return fallback
+    return ""
+
+
+def _prepare_model_content(content: str) -> str:
+    """Drop Qwen thinking blocks and other wrapper noise before JSON extraction."""
+    text = content.strip()
+    while True:
+        stripped = _THINK_RE.sub("", text).strip()
+        if stripped == text:
+            break
+        text = stripped
+    return text
 
 
 def _extract_json_object(content: str) -> str | None:
@@ -166,6 +224,14 @@ def _extract_json_object(content: str) -> str | None:
     if fenced := _FENCE_RE.search(text):
         text = fenced.group(1).strip()
 
+    # vLLM + Qwen3.6 sometimes emits a doubled leading brace before valid JSON.
+    if text.startswith("{{") and not text.startswith("{{{"):
+        text = text[1:]
+
+    return _extract_balanced_object(text)
+
+
+def _extract_balanced_object(text: str) -> str | None:
     start = text.find("{")
     if start == -1:
         return None

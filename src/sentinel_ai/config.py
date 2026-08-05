@@ -1,10 +1,12 @@
 """Configuration, resolved from (in ascending precedence):
 
 1. built-in defaults
-2. `.sentinel.toml` in the scanned repository root
-3. `SENTINEL_*` environment variables
+2. bundled `sentinel.toml` (project root in dev, packaged copy when installed)
+3. global override (`~/.config/sentinel-ai/config.toml`, then `SENTINEL_CONFIG`)
+4. `SENTINEL_*` environment variables
 
-Every knob has a working default so a fresh repo needs no config file at all.
+Organisation defaults live in `sentinel.toml` (copy from `sentinel.toml.example`).
+Inspect with `sentinel-ai config`; edit locally and re-run install to roll out.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from .models import Severity
 
-CONFIG_FILENAME = ".sentinel.toml"
+BUNDLED_CONFIG_NAME = "sentinel.toml"
 
 
 class AIConfig(BaseModel):
@@ -34,7 +36,7 @@ class AIConfig(BaseModel):
     model: str = "local-model"
     api_key: str | None = None
     timeout_seconds: float = 20.0
-    max_output_tokens: int = 768
+    max_output_tokens: int = 2048
     temperature: float = 0.0
     fail_open: bool = True
     """If the server is unreachable, warn and continue rather than block.
@@ -42,6 +44,8 @@ class AIConfig(BaseModel):
     Left on by default so an AI outage cannot freeze every developer's commits.
     Turn off for hardened environments where an unverifiable package must fail.
     """
+    enable_thinking: bool = False
+    """Qwen3/vLLM thinking mode. Off by default — thinking output breaks JSON parsing."""
 
 
 class TrivyConfig(BaseModel):
@@ -87,12 +91,9 @@ class Settings(BaseModel):
         root = (repo_root or Path.cwd()).resolve()
         data: dict = {"repo_root": root}
 
-        config_path = root / CONFIG_FILENAME
-        if config_path.is_file():
-            try:
-                data.update(tomllib.loads(config_path.read_text(encoding="utf-8")))
-            except (tomllib.TOMLDecodeError, OSError) as exc:
-                raise ConfigError(f"Could not read {config_path}: {exc}") from exc
+        for config_path in _global_config_paths():
+            data = _deep_merge(data, _read_toml(config_path))
+
         data["repo_root"] = root
 
         settings = cls.model_validate(data)
@@ -127,6 +128,66 @@ class Settings(BaseModel):
 
 class ConfigError(RuntimeError):
     """Raised when a present-but-broken config file is found."""
+
+
+def _project_root() -> Path | None:
+    """Sentinel-AI repository root when running from a source checkout."""
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "pyproject.toml").is_file() and (parent / BUNDLED_CONFIG_NAME).is_file():
+            return parent
+    return None
+
+
+def _bundled_config_paths() -> list[Path]:
+    """Organisation config: packaged copy, then project root in dev."""
+    paths: list[Path] = []
+    pkg_config = Path(__file__).resolve().parent / BUNDLED_CONFIG_NAME
+    paths.append(pkg_config)
+    if root := _project_root():
+        root_config = root / BUNDLED_CONFIG_NAME
+        if root_config != pkg_config:
+            paths.append(root_config)
+    return paths
+
+
+def resolved_config_paths() -> list[Path]:
+    """Config files on disk that contribute to Settings.load(), in merge order."""
+    return [path for path in _global_config_paths() if path.is_file()]
+
+
+def _global_config_paths() -> list[Path]:
+    """Global config locations, checked in order."""
+    paths: list[Path] = list(_bundled_config_paths())
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    config_home = Path(xdg).expanduser() if xdg else Path.home() / ".config"
+    paths.append(config_home / "sentinel-ai" / "config.toml")
+    if env_path := os.environ.get("SENTINEL_CONFIG"):
+        paths.append(Path(env_path).expanduser())
+    return paths
+
+
+def _read_toml(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    try:
+        return tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        raise ConfigError(f"Could not read {path}: {exc}") from exc
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Merge nested dicts so `[ai]` in one file can override just `base_url`."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 _TRUTHY = {"1", "true", "yes", "on"}

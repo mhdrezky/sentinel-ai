@@ -1,0 +1,42 @@
+# Organisation-wide Sentinel-AI configuration (template).
+#
+# Setup:
+#   Copy-Item sentinel.toml.example sentinel.toml
+#   Edit sentinel.toml locally (AI server, model, policy)
+#   .\scripts\install.ps1
+#
+# Inspect: sentinel-ai config
+
+[policy]
+# Block commits at this severity or above: low | medium | high | critical
+block_at_or_above = "high"
+
+# Block newly added packages that run code at install time (npm install hooks)
+block_on_install_scripts = true
+
+# Block dependencies from git/http/file instead of the public registry
+block_on_nonregistry_source = true
+
+# Add entries only after a reviewed false positive or approved internal package
+allowlist = []
+
+# Add entries only for organisation-wide bans — keep empty unless needed
+denylist = []
+
+[ai]
+# Set base_url and model to your on-prem OpenAI-compatible server (vLLM, Ollama, TGI)
+enabled = true
+base_url = "http://localhost:8000/v1"
+model = "local-model"
+timeout_seconds = 20.0
+max_output_tokens = 2048
+fail_open = true
+enable_thinking = false
+
+[trivy]
+# Set enabled = false if Trivy is not installed yet — CVE checks are skipped gracefully
+enabled = true
+binary_path = "trivy"
+timeout_seconds = 60.0
+skip_db_update = false
+offline = false

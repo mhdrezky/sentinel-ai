@@ -109,8 +109,8 @@ def _check_denylist(change: PackageChange, policy: PolicyConfig) -> Finding | No
         severity=Severity.CRITICAL,
         title=f"{change.name} is on the organisation denylist",
         detail=(
-            f"`{change.name}` is explicitly banned by this repository's "
-            f"`.sentinel.toml` policy."
+            f"`{change.name}` is explicitly banned by the organisation policy "
+            f"in sentinel.toml."
         ),
         package=change.coordinate,
         remediation="Remove the dependency, or raise an exception with the security team.",
@@ -233,7 +233,8 @@ def _check_install_script(
         package=change.coordinate,
         remediation=(
             "Read the package's install script. If it is legitimate, add "
-            f"`{change.name}` to `allowlist` in .sentinel.toml."
+            f"`{change.name}` to `allowlist` in sentinel.toml "
+            f"(see `sentinel-ai config`)."
         ),
     )
 

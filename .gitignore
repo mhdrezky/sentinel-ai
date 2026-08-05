@@ -13,5 +13,8 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 
-# Local policy override — .sentinel.toml.example is the tracked template
-.sentinel.toml
+# Local config — copy from sentinel.toml.example and edit
+sentinel.toml
+
+# Packaged copy generated from sentinel.toml before install/build
+src/sentinel_ai/sentinel.toml

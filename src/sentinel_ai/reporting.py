@@ -189,7 +189,7 @@ class Reporter:
         self._print(
             f"  {bullet} False positive? Add the package to [cyan]allowlist[/cyan]"
         )
-        self._print("    in [cyan].sentinel.toml[/cyan].")
+        self._print("    in organisation [cyan]sentinel.toml[/cyan] (`sentinel-ai config`).")
         self._print(
             f"  {bullet} Bypass once (audited, discouraged): "
             f"[cyan]git commit --no-verify[/cyan]"

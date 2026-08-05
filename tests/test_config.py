@@ -1,0 +1,75 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from sentinel_ai.config import Settings, resolved_config_paths
+from sentinel_ai.main import main
+
+
+def test_bundled_config_provides_ai_without_repo_file(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    settings = Settings.load(repo)
+
+    assert settings.ai.base_url == "http://localhost:8000/v1"
+    assert settings.ai.model == "local-model"
+    assert settings.ai.max_output_tokens == 2048
+
+
+def test_global_config_overrides_bundled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    global_config = tmp_path / "sentinel-global.toml"
+    global_config.write_text(
+        '[policy]\nblock_at_or_above = "critical"\n'
+        '[ai]\nbase_url = "http://override/v1"\nmodel = "override-model"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SENTINEL_AI_BASE_URL", raising=False)
+    monkeypatch.delenv("SENTINEL_AI_MODEL", raising=False)
+    monkeypatch.setenv("SENTINEL_CONFIG", str(global_config))
+
+    settings = Settings.load(repo)
+
+    assert settings.policy.block_at_or_above.value == "critical"
+    assert settings.ai.base_url == "http://override/v1"
+    assert settings.ai.model == "override-model"
+
+
+def test_env_overrides_global_ai_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    global_config = tmp_path / "sentinel-global.toml"
+    global_config.write_text(
+        '[ai]\nbase_url = "http://global/v1"\nmodel = "global-model"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SENTINEL_CONFIG", str(global_config))
+    monkeypatch.setenv("SENTINEL_AI_BASE_URL", "http://env/v1")
+    monkeypatch.setenv("SENTINEL_AI_MODEL", "env-model")
+
+    settings = Settings.load(repo)
+
+    assert settings.ai.base_url == "http://env/v1"
+    assert settings.ai.model == "env-model"
+
+
+def test_resolved_config_paths_includes_existing_files() -> None:
+    paths = resolved_config_paths()
+    assert paths
+    assert any(path.name == "sentinel.toml" for path in paths)
+
+
+def test_config_command_json(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = main(["config", "--json", "--repo", str(Path.cwd())])
+    assert exit_code == 0
+    payload = __import__("json").loads(capsys.readouterr().out)
+    assert payload["ai"]["base_url"] == "http://localhost:8000/v1"
+    assert payload["sources"]
