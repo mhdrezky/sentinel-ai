@@ -99,6 +99,7 @@ if (-not (Test-Path $CONFIG_FILE)) {
         Write-Ok "Config fetched from $tomlUrl"
     } catch {
         Write-Warn "Could not fetch sentinel.toml: $_"
+        Write-Step "Falling back to default bundled config"
         # keep in sync with src/sentinel_ai/sentinel.toml
         @"
 # Sentinel-AI configuration

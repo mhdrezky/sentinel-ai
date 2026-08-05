@@ -32,6 +32,7 @@ jobs:
           uv run ruff check . && uv run ruff format --check .
 
       - name: Upload install.ps1 to release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: scripts/install.ps1
