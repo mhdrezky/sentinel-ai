@@ -61,41 +61,6 @@ Supported ecosystems: **npm**, **PyPI**, **NuGet**, **Composer**.
 not yet parsed — Sentinel-AI reports this as degraded coverage rather than
 staying silent about it.
 
-## Development
-
-Bundled defaults come from [`src/sentinel_ai/sentinel.toml`](src/sentinel_ai/sentinel.toml)
-(tracked in git).
-Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
-`install.ps1`).
-
-```bash
-uv sync --group dev
-```
-
-```bash
-uv run pytest
-```
-
-On Windows, if `uv run pytest` fails with a trampoline error, recreate the
-virtual environment (`Remove-Item -Recurse -Force .venv` then `uv sync
---group dev`) or run `uv run python -m pytest` instead.
-
-```bash
-# bash / PowerShell 7+
-uv run ruff check . && uv run ruff format --check .
-```
-
-```powershell
-# Windows PowerShell 5.x (`&&` is not supported)
-uv run ruff check .; if ($?) { uv run ruff format --check . }
-```
-
-Run it against a repository without installing anything:
-
-```bash
-uv run sentinel-ai check --repo /path/to/project --verbose
-```
-
 ## Installing (Windows)
 
 ```powershell
@@ -105,21 +70,6 @@ irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1
 Pulls the installer from the **latest GitHub release** (same version as the tagged package).
 Auto-installs via `uv tool install` (user-level, no admin required), creates
 default config at `$env:USERPROFILE\.sentinel-ai\config.toml`.
-
-Install into a specific project:
-
-```powershell
-$env:SENTINEL_REPO_PATH = "D:\path\to\project"
-irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
-```
-
-Then in the protected project, only Husky is needed (the installer writes the
-hook when `$env:SENTINEL_REPO_PATH` is set):
-
-```sh
-#!/usr/bin/env sh
-sentinel-ai check || exit 1
-```
 
 ## Local AI server (on-prem model)
 
@@ -359,3 +309,38 @@ malicious indicator in its own right.
 
 A verdict below 0.5 confidence is demoted one severity step. The model advises;
 it should not be the sole reason a developer's commit fails.
+
+## Development
+
+Bundled defaults come from [`src/sentinel_ai/sentinel.toml`](src/sentinel_ai/sentinel.toml)
+(tracked in git).
+Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
+`install.ps1`).
+
+```bash
+uv sync --group dev
+```
+
+```bash
+uv run pytest
+```
+
+On Windows, if `uv run pytest` fails with a trampoline error, recreate the
+virtual environment (`Remove-Item -Recurse -Force .venv` then `uv sync
+--group dev`) or run `uv run python -m pytest` instead.
+
+```bash
+# bash / PowerShell 7+
+uv run ruff check . && uv run ruff format --check .
+```
+
+```powershell
+# Windows PowerShell 5.x (`&&` is not supported)
+uv run ruff check .; if ($?) { uv run ruff format --check . }
+```
+
+Run it against a repository without installing anything:
+
+```bash
+uv run sentinel-ai check --repo /path/to/project --verbose
+```
