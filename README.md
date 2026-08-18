@@ -193,18 +193,23 @@ npm install --save-dev husky
 npx husky init
 ```
 
-`husky init` creates `.husky/pre-commit` with a sample command. **Do not run**
-`sentinel-ai install-hook` here — it refuses to overwrite an existing hook.
+`husky init` creates `.husky/pre-commit` with a sample command. Append Sentinel-AI
+to it:
 
-**2. Set the pre-commit hook.**
+```bash
+sentinel-ai install-hook
+```
 
-Replace the contents of `.husky/pre-commit` with:
+The command adds `sentinel-ai check || exit 1` when it is not already present.
+If the line is already there, it reports that and exits successfully.
+
+**2. Or edit the pre-commit hook manually.**
+
+Append this line to `.husky/pre-commit` (or replace the sample command):
 
 ```sh
 sentinel-ai check || exit 1
 ```
-
-Or append that line if you already maintain other checks in the same file.
 
 **3. Verify** from the repository root:
 
@@ -271,7 +276,7 @@ sentinel-ai check --strict     block when Sentinel-AI or the model server fails
 sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai config             show the active organisation configuration
 sentinel-ai update             upgrade the installed CLI from GitHub
-sentinel-ai install-hook       append hook (prefer manual edit if pre-commit exists)
+sentinel-ai install-hook       append sentinel-ai to Husky pre-commit
 ```
 
 ## Failure behaviour

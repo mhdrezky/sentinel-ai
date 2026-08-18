@@ -52,13 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--no-color", action="store_true")
 
     install = subparsers.add_parser(
-        "install-hook", help="write a Husky pre-commit hook into a repository"
+        "install-hook",
+        help="append sentinel-ai to an existing Husky pre-commit hook",
     )
     install.add_argument(
         "--repo", type=Path, default=None, help="target repository (default: cwd)"
-    )
-    install.add_argument(
-        "--force", action="store_true", help="overwrite an existing hook"
     )
 
     config = subparsers.add_parser(
@@ -372,11 +370,7 @@ def _update(args: argparse.Namespace) -> int:
     return EXIT_PASS
 
 
-_HOOK_TEMPLATE = """\
-#!/usr/bin/env sh
-# Managed by Sentinel-AI. Regenerate with: sentinel-ai install-hook --force
-sentinel-ai check || exit 1
-"""
+_HOOK_LINE = "sentinel-ai check || exit 1"
 
 
 def _install_hook(args: argparse.Namespace) -> int:
@@ -395,22 +389,32 @@ def _install_hook(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
     hook_path = husky_dir / "pre-commit"
-    if hook_path.exists() and not args.force:
+    if hook_path.exists():
         existing = hook_path.read_text(encoding="utf-8")
         if "sentinel-ai" in existing:
-            reporter.success(f"hook already installed at {hook_path}")
+            reporter.success(f"sentinel-ai hook already present in {hook_path}")
             return EXIT_PASS
-        reporter.error(
-            f"{hook_path} exists and was not written by Sentinel-AI. "
-            f"Add `sentinel-ai check || exit 1` to it manually, or pass --force "
-            f"to overwrite it."
-        )
-        return EXIT_ERROR
 
-    hook_path.write_text(_HOOK_TEMPLATE, encoding="utf-8", newline="\n")
+        hook_path.write_text(
+            _append_hook_line(existing),
+            encoding="utf-8",
+            newline="\n",
+        )
+        hook_path.chmod(0o755)
+        reporter.success(f"appended sentinel-ai hook to {hook_path}")
+        return EXIT_PASS
+
+    hook_path.write_text(f"{_HOOK_LINE}\n", encoding="utf-8", newline="\n")
     hook_path.chmod(0o755)
     reporter.success(f"wrote {hook_path}")
     return EXIT_PASS
+
+
+def _append_hook_line(content: str) -> str:
+    trimmed = content.rstrip("\n")
+    if not trimmed:
+        return f"{_HOOK_LINE}\n"
+    return f"{trimmed}\n{_HOOK_LINE}\n"
 
 
 if __name__ == "__main__":
