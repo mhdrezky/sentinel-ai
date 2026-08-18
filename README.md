@@ -65,7 +65,8 @@ staying silent about it.
 
 Pulls the installer from the **latest GitHub release** (same version as the tagged
 package). Auto-installs via `uv tool install` (user-level, no admin required),
-creates default config at `~/.sentinel-ai/config.toml`.
+creates default config at `~/.sentinel-ai/config.toml`, and downloads the latest
+Trivy binary into `~/.sentinel-ai/bin/` when possible.
 
 **Windows**
 
@@ -135,42 +136,34 @@ pre-commit hook) when a commit **introduces new or changed dependencies** in
 supported lockfiles. No separate daemon — it is invoked on demand from the
 configured binary path.
 
-### Windows setup
+The Windows/macOS/Linux installers download the **latest Trivy release** into
+`~/.sentinel-ai/bin/` and set `[trivy].binary_path` in host config automatically.
+If that step fails, install manually:
 
-**1. Download** Trivy v0.73.0 (64-bit):
+### Manual Trivy setup (fallback)
 
-```powershell
-Invoke-WebRequest -Uri "https://github.com/aquasecurity/trivy/releases/download/v0.73.0/trivy_0.73.0_windows-64bit.zip" -OutFile "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit.zip"
-```
-
-**2. Extract** the archive:
-
-```powershell
-Expand-Archive -Path "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit.zip" -DestinationPath "$env:USERPROFILE\Downloads\trivy_0.73.0_windows-64bit" -Force
-```
-
-**3. Point Sentinel-AI at the binary** in host config:
-
-```powershell
-notepad $env:USERPROFILE\.sentinel-ai\config.toml
-```
-
-Under `[trivy]`, set `binary_path` to the full path of `trivy.exe` (forward
-slashes work in TOML on Windows):
+**Windows** — download the latest `trivy_*_windows-64bit.zip` from
+[GitHub releases](https://github.com/aquasecurity/trivy/releases), extract
+`trivy.exe` to `%USERPROFILE%\.sentinel-ai\bin\`, then set in host config:
 
 ```toml
 [trivy]
 enabled = true
-binary_path = "C:/Users/rezky/Downloads/trivy_0.73.0_windows-64bit/trivy.exe"
+binary_path = "C:/Users/you/.sentinel-ai/bin/trivy.exe"
 ```
 
-Adjust the path to match your username and extract folder. Prefer a permanent
-location (for example `%LOCALAPPDATA%\trivy\trivy.exe`) over `Downloads` if you
-keep Trivy long term.
+**macOS / Linux** — download the matching `trivy_*` archive for your platform,
+place the `trivy` binary in `~/.sentinel-ai/bin/`, `chmod +x` it, then:
 
-**4. Verify:**
+```toml
+[trivy]
+enabled = true
+binary_path = "/home/you/.sentinel-ai/bin/trivy"
+```
 
-```powershell
+Verify:
+
+```bash
 sentinel-ai doctor
 ```
 

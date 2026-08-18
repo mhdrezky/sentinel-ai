@@ -172,6 +172,121 @@ else
     ok "Config already exists at ${CONFIG_FILE}"
 fi
 
+# --- 4. Install Trivy (optional; warn on failure) ---
+TRIVY_BIN_DIR="${CONFIG_DIR}/bin"
+TRIVY_BIN="${TRIVY_BIN_DIR}/trivy"
+TRIVY_RELEASES_API="https://api.github.com/repos/aquasecurity/trivy/releases/latest"
+
+get_latest_trivy_release() {
+    local release tag version
+    release=$(curl -fsSL -H "User-Agent: sentinel-ai-installer" "${TRIVY_RELEASES_API}") || return 1
+    tag=$(printf '%s' "${release}" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+    if [[ -z "${tag}" ]]; then
+        echo "GitHub trivy releases/latest returned no tag_name" >&2
+        return 1
+    fi
+    version="${tag#v}"
+    printf '%s %s\n' "${tag}" "${version}"
+}
+
+trivy_asset_name() {
+    local version="$1"
+    local os arch
+    os="$(uname -s)"
+    arch="$(uname -m)"
+    case "${os}" in
+        Linux)
+            case "${arch}" in
+                x86_64 | amd64) printf 'trivy_%s_Linux-64bit.tar.gz' "${version}" ;;
+                aarch64 | arm64) printf 'trivy_%s_Linux-ARM64.tar.gz' "${version}" ;;
+                *) return 1 ;;
+            esac
+            ;;
+        Darwin)
+            case "${arch}" in
+                arm64) printf 'trivy_%s_macOS-ARM64.tar.gz' "${version}" ;;
+                x86_64) printf 'trivy_%s_macOS-64bit.tar.gz' "${version}" ;;
+                *) return 1 ;;
+            esac
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+update_config_trivy_binary_path() {
+    local binary_path="$1"
+    local current sentinel_bin_prefix normalized_current
+    [[ -f "${CONFIG_FILE}" ]] || return 0
+    current=$(grep -E '^[[:space:]]*binary_path[[:space:]]*=' "${CONFIG_FILE}" | head -1 | sed -E 's/^[[:space:]]*binary_path[[:space:]]*=[[:space:]]*"([^"]*)".*/\1/' || true)
+    sentinel_bin_prefix="${CONFIG_DIR}/bin/"
+    normalized_current="${current//\\//}"
+    if [[ -n "${current}" && "${current}" != "trivy" && "${normalized_current}" != "${sentinel_bin_prefix}"* ]]; then
+        return 0
+    fi
+    if sed --version >/dev/null 2>&1; then
+        sed -i -E "s#^([[:space:]]*binary_path[[:space:]]*=[[:space:]]*)\"[^\"]*\"#\1\"${binary_path}\"#" "${CONFIG_FILE}"
+    else
+        sed -i '' -E "s#^([[:space:]]*binary_path[[:space:]]*=[[:space:]]*)\"[^\"]*\"#\1\"${binary_path}\"#" "${CONFIG_FILE}"
+    fi
+}
+
+show_trivy_manual_install_hint() {
+    warn "Install Trivy manually from https://github.com/aquasecurity/trivy/releases"
+    warn "Then set [trivy].binary_path in ${CONFIG_FILE} (see README)"
+}
+
+trivy_installed=false
+mkdir -p "${TRIVY_BIN_DIR}"
+
+if [[ -x "${TRIVY_BIN}" ]] && "${TRIVY_BIN}" --version >/dev/null 2>&1; then
+    ok "Trivy already installed at ${TRIVY_BIN}"
+    trivy_installed=true
+fi
+
+if [[ "${trivy_installed}" != true ]]; then
+    step "Installing latest Trivy to ${TRIVY_BIN_DIR}"
+    tmp_dir=""
+    tmp_archive=""
+    if trivy_release="$(get_latest_trivy_release)"; then
+        trivy_tag="${trivy_release%% *}"
+        trivy_version="${trivy_release#* }"
+        if asset="$(trivy_asset_name "${trivy_version}")"; then
+            tmp_dir="$(mktemp -d)"
+            tmp_archive="${tmp_dir}/trivy.${asset##*.}"
+            url="https://github.com/aquasecurity/trivy/releases/download/${trivy_tag}/${asset}"
+            if curl -fsSL "${url}" -o "${tmp_archive}"; then
+                if [[ "${asset}" == *.tar.gz ]]; then
+                    tar -xzf "${tmp_archive}" -C "${tmp_dir}"
+                else
+                    warn "Unsupported Trivy archive: ${asset}"
+                    tmp_archive=""
+                fi
+                if [[ -f "${tmp_dir}/trivy" ]]; then
+                    cp "${tmp_dir}/trivy" "${TRIVY_BIN}"
+                    chmod +x "${TRIVY_BIN}"
+                    if "${TRIVY_BIN}" --version >/dev/null 2>&1; then
+                        ok "Trivy ${trivy_tag} installed at ${TRIVY_BIN}"
+                        trivy_installed=true
+                    fi
+                fi
+            fi
+        else
+            warn "Unsupported OS/arch for automatic Trivy install: $(uname -s)/$(uname -m)"
+        fi
+    fi
+    if [[ "${trivy_installed}" != true ]]; then
+        warn "Could not install Trivy automatically"
+        show_trivy_manual_install_hint
+    fi
+    if [[ -n "${tmp_dir}" && -d "${tmp_dir}" ]]; then
+        rm -rf "${tmp_dir}"
+    fi
+fi
+
+if [[ "${trivy_installed}" == true ]]; then
+    update_config_trivy_binary_path "${TRIVY_BIN}"
+fi
+
 printf '\nSentinel-AI installed successfully\n\n'
 printf '  Verify:  sentinel-ai doctor\n'
 printf '  Config:  sentinel-ai config\n\n'

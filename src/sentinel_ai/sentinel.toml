@@ -32,7 +32,7 @@ fail_open = true
 enable_thinking = false
 
 [trivy]
-# Set enabled = false if Trivy is not installed yet — CVE checks are skipped gracefully
+# Installers set this to ~/.sentinel-ai/bin/trivy(.exe) when auto-install succeeds
 enabled = true
 binary_path = "trivy"
 timeout_seconds = 60.0

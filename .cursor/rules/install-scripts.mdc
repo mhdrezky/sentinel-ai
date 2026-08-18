@@ -56,3 +56,11 @@ Or `bash install.sh --source /path/to/sentinel-ai` when invoking the script dire
 Fetch `sentinel.toml` from the **same release tag** as the package install.
 Fallback heredoc must stay in sync with `src/sentinel_ai/sentinel.toml`.
 Never overwrite existing host config.
+
+## Trivy
+
+Download latest Trivy from `GET /repos/aquasecurity/trivy/releases/latest` into
+`~/.sentinel-ai/bin/` (`trivy.exe` on Windows). Update `[trivy].binary_path` in
+host config when the value is still `"trivy"` or already points under
+`~/.sentinel-ai/bin/`. Do not overwrite a custom user path. On failure, warn
+and point to README manual fallback.

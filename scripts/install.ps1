@@ -167,6 +167,101 @@ offline = false
     Write-Ok "Config already exists at $CONFIG_FILE"
 }
 
+# --- 5. Install Trivy (optional; warn on failure) ---
+$TRIVY_BIN_DIR = "$CONFIG_DIR\bin"
+$TRIVY_EXE = "$TRIVY_BIN_DIR\trivy.exe"
+$TRIVY_RELEASES_API = "https://api.github.com/repos/aquasecurity/trivy/releases/latest"
+
+function Get-LatestTrivyRelease {
+    $headers = @{ "User-Agent" = "sentinel-ai-installer" }
+    $release = Invoke-RestMethod -Uri $TRIVY_RELEASES_API -Headers $headers
+    if (-not $release.tag_name) {
+        throw "GitHub trivy releases/latest returned no tag_name"
+    }
+    return @{
+        Tag     = $release.tag_name
+        Version = $release.tag_name.TrimStart("v")
+    }
+}
+
+function Update-ConfigTrivyBinaryPath([string] $BinaryPath) {
+    if (-not (Test-Path $CONFIG_FILE)) { return }
+
+    $content = [System.IO.File]::ReadAllText($CONFIG_FILE)
+    if ($content -notmatch '(?m)^\s*binary_path\s*=') { return }
+
+    $current = "trivy"
+    if ($content -match '(?m)^\s*binary_path\s*=\s*"([^"]*)"') {
+        $current = $matches[1]
+    }
+
+    $sentinelBinPrefix = ($TRIVY_BIN_DIR -replace '\\', '/') + "/"
+    $normalizedCurrent = $current -replace '\\', '/'
+    if ($current -ne "trivy" -and $normalizedCurrent -notlike "$sentinelBinPrefix*") {
+        return
+    }
+
+    $newContent = [regex]::Replace(
+        $content,
+        '(?m)^(\s*binary_path\s*=\s*")[^"]*(")',
+        "`${1}$BinaryPath`${2}"
+    )
+    Write-Utf8NoBom -Path $CONFIG_FILE -Content $newContent
+}
+
+function Show-TrivyManualInstallHint {
+    Write-Warn "Install Trivy manually from https://github.com/aquasecurity/trivy/releases"
+    Write-Warn "Then set [trivy].binary_path in $CONFIG_FILE (see README)"
+}
+
+$trivyInstalled = $false
+New-Item -ItemType Directory -Path $TRIVY_BIN_DIR -Force | Out-Null
+
+if (Test-Path $TRIVY_EXE) {
+    try {
+        $null = & $TRIVY_EXE --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok "Trivy already installed at $TRIVY_EXE"
+            $trivyInstalled = $true
+        }
+    } catch {
+        $trivyInstalled = $false
+    }
+}
+
+if (-not $trivyInstalled) {
+    Write-Step "Installing latest Trivy to $TRIVY_BIN_DIR"
+    $tmpZip = $null
+    $tmpDir = $null
+    try {
+        $trivyRelease = Get-LatestTrivyRelease
+        $asset = "trivy_$($trivyRelease.Version)_windows-64bit.zip"
+        $url = "https://github.com/aquasecurity/trivy/releases/download/$($trivyRelease.Tag)/$asset"
+        $tmpZip = Join-Path $env:TEMP "sentinel-trivy-$($trivyRelease.Version).zip"
+        $tmpDir = Join-Path $env:TEMP ("sentinel-trivy-extract-{0}" -f [guid]::NewGuid().ToString())
+        Invoke-WebRequest -Uri $url -OutFile $tmpZip -UseBasicParsing
+        Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
+        $extracted = Get-ChildItem -Path $tmpDir -Recurse -Filter "trivy.exe" | Select-Object -First 1
+        if (-not $extracted) { throw "trivy.exe not found in $asset" }
+        Copy-Item -Path $extracted.FullName -Destination $TRIVY_EXE -Force
+        $null = & $TRIVY_EXE --version 2>&1
+        if ($LASTEXITCODE -ne 0) { throw "installed binary failed `trivy --version`" }
+        Write-Ok "Trivy $($trivyRelease.Tag) installed at $TRIVY_EXE"
+        $trivyInstalled = $true
+    } catch {
+        Write-Warn "Could not install Trivy automatically: $_"
+        Show-TrivyManualInstallHint
+    } finally {
+        if ($tmpZip -and (Test-Path $tmpZip)) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue }
+        if ($tmpDir -and (Test-Path $tmpDir)) { Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+if ($trivyInstalled) {
+    $trivyConfigPath = $TRIVY_EXE -replace '\\', '/'
+    Update-ConfigTrivyBinaryPath -BinaryPath $trivyConfigPath
+}
+
 Write-Host ""
 Write-Host "Sentinel-AI installed successfully" -ForegroundColor Green
 Write-Host ""
