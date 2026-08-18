@@ -107,6 +107,14 @@ class AIClient:
                 "raise ai.max_output_tokens in config"
             )
 
+        # Truncated JSON — model output exceeded max_tokens
+        if content.strip().startswith("{") and choice.get("finish_reason") == "length":
+            raise AIUnavailable(
+                "AI response was truncated by max_tokens limit. "
+                "Either increase ai.max_output_tokens or reduce the number of packages "
+                "sent to the AI model."
+            )
+
         return parse_verdict(content)
 
     def health_check(self) -> str:
@@ -221,13 +229,12 @@ def _extract_json_object(content: str) -> str | None:
         return None
     text = content.strip()
 
+    # Strip markdown fences (```json ... ``` or ``` ... ```)
     if fenced := _FENCE_RE.search(text):
         text = fenced.group(1).strip()
 
-    # vLLM + Qwen3.6 sometimes emits a doubled leading brace before valid JSON.
-    if text.startswith("{{") and not text.startswith("{{{"):
-        text = text[1:]
-
+    # Strip any remaining prose: only keep the first complete JSON object.
+    # Some LLMs wrap the response in sentences like "The answer is { ... }."
     return _extract_balanced_object(text)
 
 

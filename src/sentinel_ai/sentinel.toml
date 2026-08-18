@@ -1,7 +1,7 @@
 # Organisation-wide Sentinel-AI configuration (template).
 #
 # Bundled defaults — copied into the package at build/install time.
-# Per-machine overrides: ~/.sentinel-ai/config.toml (auto-created by install.ps1)
+# Per-machine overrides: ~/.sentinel-ai/config.toml (auto-created by install.ps1 / install.sh)
 #
 # Inspect active config: sentinel-ai config
 

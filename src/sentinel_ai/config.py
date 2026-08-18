@@ -2,7 +2,7 @@
 
 1. built-in defaults (pydantic Field defaults)
 2. bundled defaults shipped with the package (`src/sentinel_ai/sentinel.toml`)
-3. host override at `~/.sentinel-ai/config.toml` (created by install.ps1 on first run)
+3. host override at `~/.sentinel-ai/config.toml` (created by install.ps1 / install.sh on first run)
 4. `SENTINEL_CONFIG` environment variable (optional explicit path)
 5. `SENTINEL_*` environment variables
 
@@ -129,7 +129,7 @@ class ConfigError(RuntimeError):
 
 
 def host_config_path() -> Path:
-    """Per-machine override written by scripts/install.ps1."""
+    """Per-machine override written by scripts/install.ps1 or scripts/install.sh."""
     return Path.home() / HOST_CONFIG_DIRNAME / HOST_CONFIG_FILENAME
 
 

@@ -12,22 +12,14 @@
 .PARAMETER Source
   Override: path to a local directory containing setup.py or pyproject.toml.
   Skips remote install and installs from local source instead.
-.PARAMETER RepoPath
-  Path to a git repository to install the Husky pre-commit hook into.
 #>
 [CmdletBinding()]
 param(
-    [string] $Source,
-    [string] $RepoPath
+    [string] $Source
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-# Fallback from environment variable (for remote script piping)
-if (-not $RepoPath -and $env:SENTINEL_REPO_PATH) {
-    $RepoPath = $env:SENTINEL_REPO_PATH
-}
 
 $CONFIG_DIR = "$env:USERPROFILE\.sentinel-ai"
 $CONFIG_FILE = "$CONFIG_DIR\config.toml"
@@ -173,22 +165,6 @@ offline = false
     Write-Warn "Edit $CONFIG_FILE with your AI server settings"
 } else {
     Write-Ok "Config already exists at $CONFIG_FILE"
-}
-
-# --- 5. Post-install hook (optional) ---
-if ($RepoPath) {
-    if (-not (Test-Path $RepoPath)) { throw "Repository path not found: $RepoPath" }
-    Write-Step "Installing Husky pre-commit hook in $RepoPath"
-    Push-Location $RepoPath
-    try {
-        sentinel-ai install-hook
-        if ($LASTEXITCODE -ne 0) { throw "install-hook failed with exit code $LASTEXITCODE" }
-        Write-Ok "Hook installed"
-    } catch {
-        Write-Warn "Hook install failed: $_"
-    } finally {
-        Pop-Location
-    }
 }
 
 Write-Host ""

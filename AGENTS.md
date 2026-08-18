@@ -37,11 +37,10 @@ Ecosystems: npm, PyPI, NuGet, Composer.
 irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
-With project hook:
+## Install (macOS / Linux)
 
-```powershell
-$env:SENTINEL_REPO_PATH = "D:\path\to\project"
-irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
+```bash
+curl -fsSL https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.sh | bash
 ```
 
 **Never** `uv tool install sentinel-ai` from PyPI — wrong package (ML toolkit, not this repo).

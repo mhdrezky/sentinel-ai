@@ -1,43 +1,55 @@
 ---
-description: Windows installer and PowerShell script conventions
-globs: scripts/**/*.ps1
+description: Installer script conventions (Windows + Unix)
+globs: scripts/install.{ps1,sh}
 alwaysApply: false
 ---
 
-# install.ps1
+# Install scripts (`install.ps1`, `install.sh`)
 
 ## Requirements
 
-- `#Requires -Version 5.1`, `$ErrorActionPreference = "Stop"`
 - Idempotent; no admin; user-level `uv tool install`
-- Check `$LASTEXITCODE` after every `uv` / `sentinel-ai` call
+- Resolve package from latest GitHub release tag (not raw branch URLs)
+- Never overwrite existing host config at `~/.sentinel-ai/config.toml`
 
-## One-liner (latest release)
+**PowerShell:** `#Requires -Version 5.1`, `$ErrorActionPreference = "Stop"`, check `$LASTEXITCODE` after `uv` / `sentinel-ai`.
+
+**Bash:** `set -euo pipefail`; ensure `~/.local/bin` and `~/.cargo/bin` on PATH after uv install.
+
+## One-liners (latest release)
 
 ```powershell
 irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
-Do **not** use raw branch URLs for the public installer.
+```bash
+curl -fsSL https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.sh | bash
+```
 
 ## Install source
 
 Resolve tag from `GET /repos/mhdrezky/sentinel-ai/releases/latest`, then:
 
-```powershell
-uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git@$tag"
+```text
+uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git@<tag>"
 ```
 
-Local dev override: `uv tool install --force --from $resolvedPath sentinel-ai`
+Local dev: `uv tool install --force --from <path> sentinel-ai`
 
-## Remote piping (`irm | iex`)
+## Remote piping
 
-Parameters do not pass through pipe. Support:
+Parameters do not pass through pipe. Optional local source via env var:
 
 ```powershell
-$env:SENTINEL_REPO_PATH = "D:\path\to\project"
+$env:SENTINEL_SOURCE = "D:\path\to\sentinel-ai"
 irm …/releases/latest/download/install.ps1 | iex
 ```
+
+```bash
+SENTINEL_SOURCE=/path/to/sentinel-ai curl -fsSL …/install.sh | bash
+```
+
+Or `bash install.sh --source /path/to/sentinel-ai` when invoking the script directly.
 
 ## Host config
 

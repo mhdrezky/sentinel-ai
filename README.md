@@ -61,15 +61,23 @@ Supported ecosystems: **npm**, **PyPI**, **NuGet**, **Composer**.
 not yet parsed — Sentinel-AI reports this as degraded coverage rather than
 staying silent about it.
 
-## Installing (Windows)
+## Installing
+
+Pulls the installer from the **latest GitHub release** (same version as the tagged
+package). Auto-installs via `uv tool install` (user-level, no admin required),
+creates default config at `~/.sentinel-ai/config.toml`.
+
+**Windows**
 
 ```powershell
 irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1 | iex
 ```
 
-Pulls the installer from the **latest GitHub release** (same version as the tagged package).
-Auto-installs via `uv tool install` (user-level, no admin required), creates
-default config at `$env:USERPROFILE\.sentinel-ai\config.toml`.
+**macOS / Linux**
+
+```bash
+curl -fsSL https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.sh | bash
+```
 
 ## Local AI server (on-prem model)
 
@@ -215,7 +223,7 @@ Defaults ship with the package. Each host overrides via:
 ~/.sentinel-ai/config.toml     (Windows: %USERPROFILE%\.sentinel-ai\config.toml)
 ```
 
-Created automatically on first `install.ps1` run from the package's bundled `sentinel.toml`.
+Created automatically on first install (`install.ps1` / `install.sh`) from the package's bundled `sentinel.toml`.
 Protected repositories only need the Husky hook.
 
 Inspect the active configuration:
@@ -315,7 +323,7 @@ it should not be the sole reason a developer's commit fails.
 Bundled defaults come from [`src/sentinel_ai/sentinel.toml`](src/sentinel_ai/sentinel.toml)
 (tracked in git).
 Per-machine overrides live in `~/.sentinel-ai/config.toml` (auto-created by
-`install.ps1`).
+`install.ps1` / `install.sh`).
 
 ```bash
 uv sync --group dev
