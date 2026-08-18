@@ -69,6 +69,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     config.add_argument("--no-color", action="store_true")
 
+    update = subparsers.add_parser(
+        "update", help="upgrade the installed CLI from the latest GitHub release"
+    )
+    update.add_argument(
+        "--from",
+        dest="source",
+        type=Path,
+        default=None,
+        help="local checkout instead of the latest release",
+    )
+    update.add_argument("--no-color", action="store_true")
+
     # Allow bare `sentinel-ai` with check flags, so the hook needs no subcommand.
     _add_check_arguments(parser)
     return parser
@@ -113,6 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         return _install_hook(args)
     if args.command == "config":
         return _config(args)
+    if args.command == "update":
+        return _update(args)
     return _check(args)
 
 
@@ -338,6 +352,23 @@ def _config(args: argparse.Namespace) -> int:
 
     reporter.info(f"  trivy:  `{settings.trivy.binary_path}`")
     reporter.info(f"[dim]Edit host overrides in {host_config_path()}[/dim]")
+    return EXIT_PASS
+
+
+def _update(args: argparse.Namespace) -> int:
+    from .update import UpdateError, run_update
+
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    try:
+        ref = run_update(source=args.source)
+    except UpdateError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    reporter.success(f"updated to {ref}")
+    reporter.info(
+        "[dim]Open a new terminal if `sentinel-ai --version` still shows the old build.[/dim]"
+    )
     return EXIT_PASS
 
 

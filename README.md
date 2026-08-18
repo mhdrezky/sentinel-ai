@@ -79,6 +79,12 @@ irm https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1
 curl -fsSL https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.sh | bash
 ```
 
+Upgrade an existing install:
+
+```bash
+sentinel-ai update
+```
+
 ## Local AI server (on-prem model)
 
 The AI review stage calls an OpenAI-compatible `/chat/completions` endpoint
@@ -264,6 +270,7 @@ sentinel-ai check --no-ai      skip the AI review stage
 sentinel-ai check --strict     block when Sentinel-AI or the model server fails
 sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai config             show the active organisation configuration
+sentinel-ai update             upgrade the installed CLI from GitHub
 sentinel-ai install-hook       append hook (prefer manual edit if pre-commit exists)
 ```
 
