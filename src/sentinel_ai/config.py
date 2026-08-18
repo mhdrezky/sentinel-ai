@@ -133,7 +133,12 @@ class ConfigError(RuntimeError):
 
 def host_config_path() -> Path:
     """Per-machine override written by scripts/install.ps1 or scripts/install.sh."""
-    return Path.home() / HOST_CONFIG_DIRNAME / HOST_CONFIG_FILENAME
+    return host_data_dir() / HOST_CONFIG_FILENAME
+
+
+def host_data_dir() -> Path:
+    """Sentinel-AI state on this machine (config, bundled Trivy binary, etc.)."""
+    return Path.home() / HOST_CONFIG_DIRNAME
 
 
 def ensure_host_config() -> Path:

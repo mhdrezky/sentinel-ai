@@ -89,6 +89,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     update.add_argument("--no-color", action="store_true")
 
+    uninstall = subparsers.add_parser(
+        "uninstall", help="remove sentinel-ai and ~/.sentinel-ai from this host"
+    )
+    uninstall.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm removal of host data and the uv tool install",
+    )
+    uninstall.add_argument("--no-color", action="store_true")
+
     # Allow bare `sentinel-ai` with check flags, so the hook needs no subcommand.
     _add_check_arguments(parser)
     return parser
@@ -137,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
         return _config(args)
     if args.command == "update":
         return _update(args)
+    if args.command == "uninstall":
+        return _uninstall(args)
     return _check(args)
 
 
@@ -391,6 +403,33 @@ def _update(args: argparse.Namespace) -> int:
     reporter.info(
         "[dim]Open a new terminal if `sentinel-ai --version` still shows the old build.[/dim]"
     )
+    return EXIT_PASS
+
+
+def _uninstall(args: argparse.Namespace) -> int:
+    from .uninstall import UninstallError, run_uninstall, uninstall_targets
+
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    if not args.yes:
+        reporter.warn("This will remove:")
+        for target in uninstall_targets():
+            reporter.info(f"  - {target}")
+        reporter.warn("Re-run with --yes to confirm.")
+        reporter.info("[dim]Husky hooks in project repos are not modified.[/dim]")
+        return EXIT_ERROR
+
+    try:
+        removed = run_uninstall(yes=True)
+    except UninstallError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    if removed:
+        for item in removed:
+            reporter.success(f"removed {item}")
+    else:
+        reporter.info("nothing to remove — sentinel-ai is not installed on this host")
+    reporter.info("[dim]Husky hooks in project repos were not modified.[/dim]")
     return EXIT_PASS
 
 

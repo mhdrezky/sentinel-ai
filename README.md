@@ -86,6 +86,14 @@ Upgrade an existing install:
 sentinel-ai update
 ```
 
+Remove Sentinel-AI from this machine (host config, Trivy binary, uv tool):
+
+```bash
+sentinel-ai uninstall --yes
+```
+
+Does not edit Husky hooks already added to project repositories.
+
 ## Local AI server (on-prem model)
 
 The AI review stage calls an OpenAI-compatible `/chat/completions` endpoint
@@ -273,6 +281,7 @@ sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai config             show the active organisation configuration
 sentinel-ai config edit        open host config in the default editor
 sentinel-ai update             upgrade the installed CLI from GitHub
+sentinel-ai uninstall --yes    remove CLI and ~/.sentinel-ai from this host
 sentinel-ai install-hook       append sentinel-ai to Husky pre-commit
 ```
 
