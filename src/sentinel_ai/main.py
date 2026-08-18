@@ -17,7 +17,12 @@ from pathlib import Path
 
 from . import __version__
 from .ai import AIClient, AIUnavailable
-from .config import ConfigError, Settings, host_config_path, resolved_config_paths
+from .config import (
+    ConfigError,
+    Settings,
+    open_host_config_in_editor,
+    resolved_config_paths,
+)
 from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide, requires_ai_review
 from .gitdiff import GitError, repo_root
 from .manifests import ParsedManifest
@@ -60,12 +65,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     config = subparsers.add_parser(
-        "config", help="show the active organisation configuration"
+        "config", help="show or edit the active organisation configuration"
     )
     config.add_argument(
         "--json", action="store_true", help="emit machine-readable output"
     )
     config.add_argument("--no-color", action="store_true")
+    config_sub = config.add_subparsers(dest="config_command")
+    config_edit = config_sub.add_parser(
+        "edit", help="open host config in the default editor"
+    )
+    config_edit.add_argument("--no-color", action="store_true")
 
     update = subparsers.add_parser(
         "update", help="upgrade the installed CLI from the latest GitHub release"
@@ -122,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "install-hook":
         return _install_hook(args)
     if args.command == "config":
+        if getattr(args, "config_command", None) == "edit":
+            return _config_edit(args)
         return _config(args)
     if args.command == "update":
         return _update(args)
@@ -349,7 +361,19 @@ def _config(args: argparse.Namespace) -> int:
         reporter.info("  ai:     [dim]disabled[/dim]")
 
     reporter.info(f"  trivy:  `{settings.trivy.binary_path}`")
-    reporter.info(f"[dim]Edit host overrides in {host_config_path()}[/dim]")
+    reporter.info("[dim]Edit host overrides: sentinel-ai config edit[/dim]")
+    return EXIT_PASS
+
+
+def _config_edit(args: argparse.Namespace) -> int:
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    try:
+        path = open_host_config_in_editor()
+    except ConfigError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    reporter.success(f"opened {path}")
     return EXIT_PASS
 
 

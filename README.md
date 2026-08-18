@@ -94,9 +94,12 @@ the hook in production repos.
 
 **1. Open host config:**
 
-```powershell
-notepad $env:USERPROFILE\.sentinel-ai\config.toml
+```bash
+sentinel-ai config edit
 ```
+
+Opens `~/.sentinel-ai/config.toml` in Notepad (Windows), TextEdit (macOS), or
+`$EDITOR` / `xdg-open` (Linux).
 
 **2. Set `base_url` and `model`** under `[ai]` — replace the localhost defaults
 with your server:
@@ -268,6 +271,7 @@ sentinel-ai check --no-ai      skip the AI review stage
 sentinel-ai check --strict     block when Sentinel-AI or the model server fails
 sentinel-ai doctor             check Trivy and the on-prem model server
 sentinel-ai config             show the active organisation configuration
+sentinel-ai config edit        open host config in the default editor
 sentinel-ai update             upgrade the installed CLI from GitHub
 sentinel-ai install-hook       append sentinel-ai to Husky pre-commit
 ```

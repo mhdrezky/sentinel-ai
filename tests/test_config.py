@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from sentinel_ai.config import Settings, host_config_path, resolved_config_paths
+from sentinel_ai.config import (
+    Settings,
+    ensure_host_config,
+    host_config_path,
+    open_host_config_in_editor,
+    resolved_config_paths,
+)
 from sentinel_ai.main import main
 
 
@@ -116,3 +122,53 @@ def test_config_command_json(
     payload = __import__("json").loads(capsys.readouterr().out)
     assert payload["ai"]["base_url"] == "http://localhost:8000/v1"
     assert payload["sources"]
+
+
+def test_ensure_host_config_creates_from_bundled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
+) -> None:
+    host_config = tmp_path / ".sentinel-ai" / "config.toml"
+    monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
+
+    created = ensure_host_config()
+
+    assert created == host_config
+    assert host_config.is_file()
+    assert "[policy]" in host_config.read_text(encoding="utf-8")
+
+
+def test_config_edit_opens_editor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
+) -> None:
+    host_config = tmp_path / ".sentinel-ai" / "config.toml"
+    monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> None:
+        calls.append(command)
+
+    monkeypatch.setattr("sentinel_ai.config.subprocess.run", fake_run)
+    monkeypatch.setattr("sentinel_ai.config.sys.platform", "win32")
+
+    assert main(["config", "edit", "--no-color"]) == 0
+    assert calls == [["notepad.exe", str(host_config)]]
+
+
+def test_open_host_config_in_editor_uses_editor_on_linux(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
+) -> None:
+    host_config = tmp_path / ".sentinel-ai" / "config.toml"
+    monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
+    monkeypatch.setenv("EDITOR", "vim")
+    calls: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> None:
+        calls.append(command)
+
+    monkeypatch.setattr("sentinel_ai.config.subprocess.run", fake_run)
+    monkeypatch.setattr("sentinel_ai.config.sys.platform", "linux")
+
+    path = open_host_config_in_editor()
+
+    assert path == host_config
+    assert calls == [["vim", str(host_config)]]

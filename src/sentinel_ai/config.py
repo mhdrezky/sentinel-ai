@@ -6,13 +6,16 @@
 4. `SENTINEL_CONFIG` environment variable (optional explicit path)
 5. `SENTINEL_*` environment variables
 
-Edit the host file after install: `sentinel-ai config` shows the active path.
+Edit the host file after install: `sentinel-ai config edit`.
 """
 
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
+import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -131,6 +134,46 @@ class ConfigError(RuntimeError):
 def host_config_path() -> Path:
     """Per-machine override written by scripts/install.ps1 or scripts/install.sh."""
     return Path.home() / HOST_CONFIG_DIRNAME / HOST_CONFIG_FILENAME
+
+
+def ensure_host_config() -> Path:
+    """Create host config from bundled defaults when it does not exist yet."""
+    path = host_config_path()
+    if path.is_file():
+        return path
+
+    bundled = _bundled_config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if bundled.is_file():
+        path.write_text(bundled.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+    else:
+        path.write_text("", encoding="utf-8")
+    return path
+
+
+def open_host_config_in_editor() -> Path:
+    """Open the host config in the platform default editor."""
+    path = ensure_host_config()
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["notepad.exe", str(path)], check=False)
+        elif sys.platform == "darwin":
+            subprocess.run(["open", "-t", str(path)], check=True)
+        else:
+            editor = os.environ.get("VISUAL") or os.environ.get("EDITOR")
+            if editor:
+                subprocess.run([*shlex.split(editor), str(path)], check=False)
+            elif shutil.which("xdg-open"):
+                subprocess.run(["xdg-open", str(path)], check=False)
+            elif shutil.which("nano"):
+                subprocess.run(["nano", str(path)], check=False)
+            else:
+                raise ConfigError(
+                    "No editor found. Set $EDITOR or install xdg-open/nano."
+                )
+    except OSError as exc:
+        raise ConfigError(f"Could not open {path}: {exc}") from exc
+    return path
 
 
 def _bundled_config_path() -> Path:
