@@ -52,7 +52,9 @@ class TestRunUpdate:
         with patch("sentinel_ai.update._uv_tool_install") as install:
             ref = run_update(source=tmp_path)
         assert ref == str(tmp_path.resolve())
-        install.assert_called_once_with(["--from", str(tmp_path.resolve()), "sentinel-ai"])
+        install.assert_called_once_with(
+            ["--from", str(tmp_path.resolve()), "sentinel-ai"]
+        )
 
     def test_missing_source_raises(self, tmp_path: Path):
         missing = tmp_path / "missing"

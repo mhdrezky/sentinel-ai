@@ -178,7 +178,9 @@ def ensure_host_config() -> Path:
     bundled = _bundled_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     if bundled.is_file():
-        path.write_text(bundled.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
+        path.write_text(
+            bundled.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+        )
     else:
         path.write_text("", encoding="utf-8")
     return path

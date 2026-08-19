@@ -21,7 +21,9 @@ def uninstall_targets() -> list[str]:
     if _uv_binary():
         targets.append(f"uv tool: {TOOL_NAME}")
     else:
-        targets.append(f"uv tool: {TOOL_NAME} (uv not on PATH — remove manually if present)")
+        targets.append(
+            f"uv tool: {TOOL_NAME} (uv not on PATH — remove manually if present)"
+        )
     return targets
 
 

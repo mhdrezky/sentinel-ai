@@ -53,7 +53,10 @@ class TestInstallHook:
     def test_appends_to_existing_pre_commit(self, repo: Path):
         hook = write_pre_commit(repo, "#!/usr/bin/env sh\nnpm test\n")
         assert main(["install-hook", "--repo", str(repo)]) == EXIT_PASS
-        assert hook.read_text(encoding="utf-8") == f"#!/usr/bin/env sh\nnpm test\n{_HOOK_LINE}\n"
+        assert (
+            hook.read_text(encoding="utf-8")
+            == f"#!/usr/bin/env sh\nnpm test\n{_HOOK_LINE}\n"
+        )
 
     def test_reports_when_already_present(self, repo: Path):
         hook = write_pre_commit(repo, f"#!/usr/bin/env sh\n{_HOOK_LINE}\n")
