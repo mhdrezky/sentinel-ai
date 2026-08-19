@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -30,6 +32,26 @@ jobs:
         run: |
           uv run pytest -q
           uv run ruff check . && uv run ruff format --check .
+
+      # The installers are shipped verbatim as release assets, so a syntax error
+      # in one reaches users as a broken one-liner. Nothing else executes them.
+      - name: Validate install.sh
+        run: bash -n scripts/install.sh
+
+      - name: Validate install.ps1
+        shell: pwsh
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path scripts/install.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object {
+              Write-Host "::error file=scripts/install.ps1,line=$($_.Extent.StartLineNumber)::$($_.Message)"
+            }
+            exit 1
+          }
+          Write-Host "install.ps1 parses clean"
 
       - name: Upload install scripts to release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')

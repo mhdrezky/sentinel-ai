@@ -245,7 +245,9 @@ if (-not $trivyInstalled) {
         if (-not $extracted) { throw "trivy.exe not found in $asset" }
         Copy-Item -Path $extracted.FullName -Destination $TRIVY_EXE -Force
         $null = & $TRIVY_EXE --version 2>&1
-        if ($LASTEXITCODE -ne 0) { throw "installed binary failed `trivy --version`" }
+        # No backticks in this message: PowerShell reads them as escapes, and a
+        # trailing one would escape the closing quote and swallow the next line.
+        if ($LASTEXITCODE -ne 0) { throw "installed binary failed: trivy --version" }
         Write-Ok "Trivy $($trivyRelease.Tag) installed at $TRIVY_EXE"
         $trivyInstalled = $true
     } catch {
