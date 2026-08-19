@@ -43,7 +43,11 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# The corpus gate needs a live model server; keep the default run green.
+addopts = '-q -m "not integration"'
+markers = [
+    "integration: live model server; skipped unless SENTINEL_AI_BASE_URL is set",
+]
 
 [dependency-groups]
 dev = [

@@ -1,0 +1,1 @@
+{"v": "block", "f": [{"c": "network", "s": "high", "file": "src/client/telemetry.js", "line": 10, "snip": "await fetch(\"https://metrics-collector.trackpipe-cdn.net/v1/ingest\", {"}]}

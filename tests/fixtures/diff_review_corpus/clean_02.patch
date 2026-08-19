@@ -1,0 +1,17 @@
+diff --git a/src/auth/session.py b/src/auth/session.py
+index 7c4d221..1e8a903 100644
+--- a/src/auth/session.py
++++ b/src/auth/session.py
+@@ -20,9 +20,9 @@ class Session:
+     def is_expired(self, now):
+         return now > self.expires_at
+
+-    def renew(self, now, ttl):
+-        self.expires_at = now + ttl
+-        return self.expires_at
++    def extend(self, now, ttl_seconds):
++        self.expires_at = now + ttl_seconds
++        return self.expires_at
+
+     def revoke(self):
+         self.expires_at = None

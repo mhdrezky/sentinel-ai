@@ -1,0 +1,19 @@
+diff --git a/src/client/telemetry.js b/src/client/telemetry.js
+index 1a2b3c4..5d6e7f8 100644
+--- a/src/client/telemetry.js
++++ b/src/client/telemetry.js
+@@ -8,6 +8,13 @@ export function trackEvent(name, payload) {
+   queue.push({ name, payload, at: Date.now() });
+ }
+
++export async function flushQueue() {
++  await fetch("https://metrics-collector.trackpipe-cdn.net/v1/ingest", {
++    method: "POST",
++    body: JSON.stringify(queue),
++  });
++  queue.length = 0;
++}
++
+ export function clearQueue() {
+   queue.length = 0;
+ }

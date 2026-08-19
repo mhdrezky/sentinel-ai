@@ -14,6 +14,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from . import __version__
 from .ai import AIClient, AIUnavailable
@@ -29,6 +30,9 @@ from .manifests import ParsedManifest
 from .models import AIVerdict, ScanResult, Severity
 from .reporting import Reporter, to_json
 from .scanner import Scanner, SourceRevision, trivy_version
+
+if TYPE_CHECKING:
+    from .diff_review.engine import DiffReviewOutcome
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,6 +51,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     check = subparsers.add_parser("check", help="scan a change set (default)")
     _add_check_arguments(check)
+
+    diff_review = subparsers.add_parser(
+        "diff-review",
+        help="review the staged code diff with the on-prem model",
+    )
+    _add_diff_review_arguments(diff_review)
 
     doctor = subparsers.add_parser(
         "doctor", help="verify Trivy and the on-prem model server"
@@ -133,10 +143,43 @@ def _add_check_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_diff_review_arguments(parser: argparse.ArgumentParser) -> None:
+    """Flags only — no positional argument.
+
+    Phase 1 adds a `stats` subcommand under `diff-review`, and a positional
+    would be ambiguous with it. There is no commit-message input: this layer
+    runs inside `check` on the pre-commit hook, where no message exists yet.
+    """
+    parser.add_argument(
+        "--repo", type=Path, default=None, help="repository root (default: cwd)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be sent; no model call, no log entry",
+    )
+    parser.add_argument(
+        "--no-ai", action="store_true", help="run the pipeline without the model"
+    )
+    parser.add_argument("--json", action="store_true", help="emit a JSON report")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    parser.add_argument("--no-color", action="store_true")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="block the commit when the model server is unreachable",
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "diff-review":
+        # Lazy: the check path must not pay for these imports (AGENTS.md rule 4).
+        from .diff_review.engine import run_diff_review
+
+        return run_diff_review(args)
     if args.command == "doctor":
         return _doctor(args)
     if args.command == "install-hook":
@@ -192,6 +235,12 @@ def _check(args: argparse.Namespace) -> int:
 
     reporter.scan_summary(scan)
 
+    # Runs on the same hook line as the dependency check, so a CLI update is
+    # all it takes to reach a machine. It must happen before the short-circuit
+    # below: a commit with no dependency change at all is the common case, and
+    # it is exactly the commit this layer exists to look at.
+    diff_outcome = _maybe_review_diff(args, root, settings, reporter, revision)
+
     # Findings can exist with no dependency change at all — an edited
     # `postinstall` hook is the obvious case — so both must be empty to
     # short-circuit here.
@@ -201,7 +250,7 @@ def _check(args: argparse.Namespace) -> int:
             print(to_json(decision, scan))
         elif args.verbose:
             reporter.success("Sentinel-AI: no dependency changes")
-        return EXIT_PASS
+        return _with_diff_review(EXIT_PASS, diff_outcome)
 
     verdict = _maybe_analyse(scan, scanner.parsed_manifests, settings, reporter)
     decision = decide(scan, verdict, settings.policy)
@@ -215,7 +264,45 @@ def _check(args: argparse.Namespace) -> int:
             elapsed = time.perf_counter() - started
             reporter.info(f"[dim]completed in {elapsed:.2f}s[/dim]")
 
-    return decision.exit_code
+    return _with_diff_review(decision.exit_code, diff_outcome)
+
+
+def _maybe_review_diff(
+    args: argparse.Namespace,
+    root: Path,
+    settings: Settings,
+    reporter: Reporter,
+    revision: SourceRevision,
+) -> DiffReviewOutcome | None:
+    """Review the staged code diff, or return None when it does not apply.
+
+    Only in `staged` mode: `--all` and `--range` answer a different question,
+    and this layer reads the index.
+    """
+    if revision.mode != "staged":
+        return None
+
+    # Lazy: a commit that never reaches this line should not pay for the import.
+    from .diff_review.engine import report, review_staged
+
+    try:
+        outcome = review_staged(root, settings, no_ai=args.no_ai, strict=args.strict)
+    except Exception as exc:
+        # Broad by design, same reasoning as the scanner: this now sits on
+        # every commit for the whole team, so a bug here must cost a warning,
+        # never someone's ability to commit.
+        reporter.warn(f"diff review skipped after an internal error: {exc}")
+        return None
+
+    report(reporter, outcome)
+    return outcome
+
+
+def _with_diff_review(exit_code: int, outcome: DiffReviewOutcome | None) -> int:
+    """Let a blocking diff review fail an otherwise-passing check."""
+    if outcome is not None and outcome.blocks and exit_code == EXIT_PASS:
+        return EXIT_BLOCK
+    return exit_code
 
 
 def _maybe_analyse(

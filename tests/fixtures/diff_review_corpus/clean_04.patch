@@ -1,0 +1,14 @@
+diff --git a/src/config/defaults.py b/src/config/defaults.py
+index 5f6a7b8..8c9d0e1 100644
+--- a/src/config/defaults.py
++++ b/src/config/defaults.py
+@@ -4,7 +4,9 @@
+ RETRY_ATTEMPTS = 3
+-CACHE_TTL_SECONDS = 300
++CACHE_TTL_SECONDS = 900
++CACHE_MAX_ENTRIES = 10_000
+ PAGE_SIZE = 50
+
+-LOG_LEVEL = "INFO"
++LOG_LEVEL = "WARNING"
++LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"

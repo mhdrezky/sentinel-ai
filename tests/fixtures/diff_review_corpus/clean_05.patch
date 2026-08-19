@@ -1,0 +1,24 @@
+diff --git a/src/parsing/tokens.py b/src/parsing/tokens.py
+index 2b3c4d5..6e7f8a9 100644
+--- a/src/parsing/tokens.py
++++ b/src/parsing/tokens.py
+@@ -1,10 +1,17 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++
++
++@dataclass(frozen=True)
++class Token:
++    kind: str
++    value: str
++    offset: int
++
++
+ def tokenise(source):
+-    out = []
++    out: list[Token] = []
+     for index, raw in enumerate(source.split()):
+-        out.append((raw, index))
++        out.append(Token(kind="word", value=raw, offset=index))
+     return out

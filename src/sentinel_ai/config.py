@@ -66,6 +66,26 @@ class TrivyConfig(BaseModel):
         return shutil.which(self.binary_path)
 
 
+class DiffReviewConfig(BaseModel):
+    """Staged-diff review — a separate layer from the dependency check.
+
+    Token and timeout budgets are deliberately *not* inherited from `AIConfig`:
+    this reviewer asks for a tiny JSON verdict and runs on every commit, so
+    tuning the dependency reviewer must not silently move its limits.
+    """
+
+    enabled: bool = True
+    fail_open: bool = True
+    """An unreachable model server warns and lets the commit through."""
+    max_output_tokens: int = 256
+    timeout_seconds: float = 12.0
+    max_diff_bytes: int = 40_000
+    """Diffs above this skip the model entirely — truncating would hide findings."""
+    log_file: str = "ai-review.jsonl"
+    """Resolved against the repository's git directory, not `repo_root / .git`."""
+    log_findings: bool = False
+
+
 class PolicyConfig(BaseModel):
     """What actually fails a commit."""
 
@@ -89,6 +109,7 @@ class Settings(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     trivy: TrivyConfig = Field(default_factory=TrivyConfig)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
+    diff_review: DiffReviewConfig = Field(default_factory=DiffReviewConfig)
     verbose: bool = False
 
     @classmethod
@@ -115,6 +136,13 @@ class Settings(BaseModel):
             self.ai.timeout_seconds = timeout
         if (enabled := _env_bool(env, "SENTINEL_AI_ENABLED")) is not None:
             self.ai.enabled = enabled
+
+        if (dr_on := _env_bool(env, "SENTINEL_DIFF_REVIEW_ENABLED")) is not None:
+            self.diff_review.enabled = dr_on
+        if (dr_tokens := _env_int(env, "SENTINEL_DIFF_REVIEW_MAX_TOKENS")) is not None:
+            self.diff_review.max_output_tokens = dr_tokens
+        if (dr_timeout := _env_float(env, "SENTINEL_DIFF_REVIEW_TIMEOUT")) is not None:
+            self.diff_review.timeout_seconds = dr_timeout
 
         if (trivy_bin := env.get("SENTINEL_TRIVY_PATH")) is not None:
             self.trivy.binary_path = trivy_bin
@@ -243,5 +271,15 @@ def _env_float(env: dict[str, str] | os._Environ, key: str) -> float | None:
         return None
     try:
         return float(raw)
+    except ValueError:
+        return None
+
+
+def _env_int(env: dict[str, str] | os._Environ, key: str) -> int | None:
+    raw = env.get(key)
+    if raw is None:
+        return None
+    try:
+        return int(raw)
     except ValueError:
         return None

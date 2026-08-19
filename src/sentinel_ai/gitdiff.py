@@ -50,6 +50,20 @@ def has_head(root: Path) -> bool:
     return _run_git(["rev-parse", "--verify", "HEAD"], root).returncode == 0
 
 
+def git_dir(root: Path) -> Path:
+    """The repository's git directory.
+
+    Not `root / ".git"`: in a linked worktree or a submodule that path is a
+    *file* pointing elsewhere, so anything written there would land in the
+    wrong place — or nowhere.
+    """
+    result = _run_git(["rev-parse", "--git-dir"], root)
+    if result.returncode != 0:
+        raise GitError(f"could not resolve the git directory for {root}")
+    raw = Path(result.stdout.strip())
+    return raw.resolve() if raw.is_absolute() else (root / raw).resolve()
+
+
 def staged_files(root: Path) -> list[str]:
     """Repo-relative paths of files added/copied/modified/renamed in the index.
 
@@ -73,6 +87,30 @@ def changed_files_between(root: Path, base: str, head: str = "HEAD") -> list[str
     if result.returncode != 0:
         raise GitError(f"could not diff {base}...{head}: {result.stderr.strip()}")
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+
+
+def staged_unified_diff(root: Path) -> str:
+    """Unified diff of the index — the text the diff reviewer reads.
+
+    `--no-ext-diff` because a `diff.external` driver in the developer's
+    gitconfig would emit something that is not a unified diff at all, and the
+    grounding pass would reject every finding. `--diff-filter=ACMR` matches
+    `staged_files`: removed lines from a deleted file are noise here.
+    """
+    args = [
+        "diff",
+        "--cached",
+        "--no-color",
+        "--no-ext-diff",
+        "--diff-filter=ACMR",
+    ]
+    if not has_head(root):
+        # No HEAD yet: diff against the empty tree so the initial commit is reviewed.
+        args.append(_EMPTY_TREE)
+    result = _run_git(args, root)
+    if result.returncode != 0:
+        raise GitError(f"could not read the staged diff: {result.stderr.strip()}")
+    return result.stdout
 
 
 def read_staged(root: Path, path: str) -> str | None:

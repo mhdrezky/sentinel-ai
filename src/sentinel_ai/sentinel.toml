@@ -31,6 +31,25 @@ max_output_tokens = 2048
 fail_open = true
 enable_thinking = false
 
+[diff_review]
+# Reviews the staged *code* diff — orthogonal to the dependency check above.
+enabled = true
+
+# An unreachable model server warns and lets the commit through
+fail_open = true
+
+# Deliberately separate from [ai]: this reviewer returns a tiny JSON verdict
+# and runs on every commit, so tuning the dependency reviewer must not move it
+max_output_tokens = 256
+timeout_seconds = 12.0
+
+# Diffs above this skip the model entirely — truncating would hide findings
+max_diff_bytes = 40_000
+
+# Appended inside the repository's git directory
+log_file = "ai-review.jsonl"
+log_findings = false
+
 [trivy]
 # Installers set this to ~/.sentinel-ai/bin/trivy(.exe) when auto-install succeeds
 enabled = true
