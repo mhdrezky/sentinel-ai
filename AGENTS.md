@@ -2,6 +2,10 @@
 
 Instructions for AI agents working in this repository. **Read this file and `.cursor/rules/` before making changes.**
 
+Claude Code sessions also load `CLAUDE.md`, which points here for anything below and adds
+the release procedure and verify commands. This file stays canonical — put shared rules
+here, not there.
+
 ## Roles
 
 | Agent | When | Do | Don't |
@@ -13,13 +17,18 @@ Default handoff: Cursor reviews → user copies `docs/context.md` → OpenCode e
 
 ## Project summary
 
-**Sentinel-AI** blocks malicious / typo-squatted / vulnerable dependencies in Husky pre-commit hooks.
+**Sentinel-AI** blocks malicious / typo-squatted / vulnerable dependencies in Husky pre-commit hooks, and reviews the staged code diff with a local model.
 
 ```
-staged git index → manifest diff → heuristics + trivy → (gated) AI → exit 0|1
+staged index ─┬─ manifest diff → heuristics + trivy → (gated) AI → exit 0|1
+              └─ code diff → grounded AI review (network, watermark)
 ```
 
 Ecosystems: npm, PyPI, NuGet, Composer.
+
+Both layers run inside `sentinel-ai check` — the one line the Husky `pre-commit` hook calls.
+**No second hook, no per-repo install step:** a new capability reaches a machine when the
+CLI is updated. Wire new layers into `check` rather than adding hooks.
 
 ## Config (critical)
 
@@ -47,6 +56,49 @@ curl -fsSL https://github.com/mhdrezky/sentinel-ai/releases/latest/download/inst
 
 Remote install resolves the **latest release tag** via GitHub API, then:
 `git+https://github.com/mhdrezky/sentinel-ai.git@<tag>`
+
+## Releases
+
+A release is a **tag push**. Nothing is created by hand in the GitHub UI; the `v0.1.0`
+pattern of uploading a PyInstaller `.exe` is abandoned.
+
+```powershell
+# 1. Bump the version in three places
+#    pyproject.toml               version = "X.Y.Z"
+#    src/sentinel_ai/__init__.py  __version__ = "X.Y.Z"
+#    uv.lock                      regenerate via `uv sync --group dev`
+
+# 2. Run the workflow's own gate locally — a failure here is a failed release
+uv sync --group dev
+uv run pytest -q
+uv run ruff check .
+uv run ruff format --check .
+
+# 3. Commit, push, tag, push the tag
+git push origin main
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+Pushing a `v*` tag triggers `.github/workflows/release.yml`, which reruns that gate and then
+uses `softprops/action-gh-release` to create the Release and attach `scripts/install.ps1`
+and `scripts/install.sh`.
+
+Confirm it actually published:
+
+```bash
+curl -s https://api.github.com/repos/mhdrezky/sentinel-ai/releases/latest | grep tag_name
+```
+
+**A tag alone ships nothing.** Installers resolve `releases/latest`, so if the workflow
+fails the tag exists, no Release appears, and `latest` keeps serving the previous version
+with no error anywhere. There is also **no CI on push to `main`** — only on tags — so
+formatting and test rot stay invisible until someone tries to release.
+
+When a release workflow fails: fix the cause, commit it, then either re-point the tag
+(delete local + remote, re-tag the green commit — only while no Release object exists for
+it, check the `releases` API first) or tag a patch version. Re-running the failed workflow
+on the same commit does not help; the commit is what failed.
 
 ## Development
 
