@@ -1,6 +1,6 @@
 [project]
 name = "sentinel-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local supply-chain guard — blocks malicious dependencies in pre-commit hooks"
 readme = "README.md"
 authors = [
