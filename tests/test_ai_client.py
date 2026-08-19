@@ -82,10 +82,10 @@ class TestParseVerdict:
         assert parse_verdict(content).summary == "from reasoning field"
 
     def test_reasoning_field_via_message_content(self):
-        from sentinel_ai.ai.client import _message_content
+        from sentinel_ai.ai.json_utils import message_content
 
         message = {"content": "", "reasoning": json.dumps(VALID_VERDICT)}
-        assert parse_verdict(_message_content(message)).risk_level is Severity.HIGH
+        assert parse_verdict(message_content(message)).risk_level is Severity.HIGH
 
     def test_qwen_think_tags_are_stripped(self):
         think_open, think_close = "<" + "think>", "</" + "think>"
@@ -168,9 +168,10 @@ class TestClientTransport:
         )
         AIClient(self._config()).analyse(self._changes(), [], {})
         payload = json.loads(httpx_mock.get_requests()[0].content)
-        assert payload["extra_body"] == {
-            "chat_template_kwargs": {"enable_thinking": False},
-        }
+        # Top level, not under `extra_body`: vLLM reads the raw body and silently
+        # ignores that wrapper, so the model kept thinking and spent the budget.
+        assert payload["chat_template_kwargs"] == {"enable_thinking": False}
+        assert "extra_body" not in payload
 
 
 class TestPromptSafety:

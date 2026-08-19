@@ -11,7 +11,6 @@ one call, and async plumbing would only add startup cost to the binary.
 from __future__ import annotations
 
 import json
-import re
 
 import httpx
 from pydantic import ValidationError
@@ -19,6 +18,7 @@ from pydantic import ValidationError
 from ..config import AIConfig
 from ..manifests import ParsedManifest
 from ..models import AIVerdict, Finding, PackageChange, Severity
+from .json_utils import extract_json_object, message_content, prepare_model_content
 from .prompts import SYSTEM_PROMPT, build_user_prompt
 
 
@@ -64,9 +64,10 @@ class AIClient:
         }
         if not self.config.enable_thinking:
             # Qwen3 defaults to a thinking template; reasoning text breaks JSON parsing.
-            payload["extra_body"] = {
-                "chat_template_kwargs": {"enable_thinking": False},
-            }
+            # Top level, not nested under `extra_body`: that wrapper is an OpenAI
+            # *SDK* convention, and a server reading raw JSON drops the unknown key
+            # and keeps on thinking.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
 
         headers = {"Content-Type": "application/json"}
         if self.config.api_key:
@@ -94,7 +95,7 @@ class AIClient:
         try:
             body = response.json()
             choice = body["choices"][0]
-            content = _message_content(choice["message"])
+            content = message_content(choice["message"])
         except (json.JSONDecodeError, KeyError, IndexError, TypeError) as exc:
             raise AIUnavailable(
                 f"model server returned an unexpected response shape: {exc}"
@@ -142,8 +143,8 @@ def parse_verdict(content: str) -> AIVerdict:
     Small models wrap JSON in prose or markdown fences even when told not to,
     so the object is extracted rather than assuming a clean payload.
     """
-    prepared = _prepare_model_content(content)
-    raw = _extract_json_object(prepared)
+    prepared = prepare_model_content(content)
+    raw = extract_json_object(prepared)
     if raw is None:
         preview = prepared[:200].replace("\n", " ").strip()
         detail = f" (got: {preview!r})" if preview else ""
@@ -152,14 +153,7 @@ def parse_verdict(content: str) -> AIVerdict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
-        # vLLM + Qwen3.6 occasionally prefixes JSON with an extra `{`.
-        if raw.startswith("{{") and not raw.startswith("{{{"):
-            try:
-                data = json.loads(raw[1:])
-            except json.JSONDecodeError:
-                raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
-        else:
-            raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
+        raise AIUnavailable(f"model response was not valid JSON: {exc}") from exc
 
     if not isinstance(data, dict):
         raise AIUnavailable("model response JSON was not an object")
@@ -184,85 +178,3 @@ def _clamp_confidence(value: object) -> float:
     except (TypeError, ValueError):
         return 0.0
     return max(0.0, min(1.0, number))
-
-
-_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
-_THINK_RE = re.compile(r"<\s*think\s*>.*?<\s*/\s*think\s*>", re.DOTALL | re.IGNORECASE)
-
-
-def _message_content(message: object) -> str:
-    """Normalise OpenAI-compatible message shapes into plain text."""
-    if not isinstance(message, dict):
-        return ""
-    content = message.get("content") or ""
-    if isinstance(content, list):
-        content = "".join(
-            part.get("text", "")
-            for part in content
-            if isinstance(part, dict) and part.get("type") == "text"
-        )
-    text = str(content).strip()
-    if text:
-        return text
-    # vLLM + Qwen3 may put the answer in `reasoning` or `reasoning_content`
-    # when thinking mode is active, leaving `content` empty.
-    for key in ("reasoning_content", "reasoning"):
-        fallback = str(message.get(key) or "").strip()
-        if fallback:
-            return fallback
-    return ""
-
-
-def _prepare_model_content(content: str) -> str:
-    """Drop Qwen thinking blocks and other wrapper noise before JSON extraction."""
-    text = content.strip()
-    while True:
-        stripped = _THINK_RE.sub("", text).strip()
-        if stripped == text:
-            break
-        text = stripped
-    return text
-
-
-def _extract_json_object(content: str) -> str | None:
-    if not content:
-        return None
-    text = content.strip()
-
-    # Strip markdown fences (```json ... ``` or ``` ... ```)
-    if fenced := _FENCE_RE.search(text):
-        text = fenced.group(1).strip()
-
-    # Strip any remaining prose: only keep the first complete JSON object.
-    # Some LLMs wrap the response in sentences like "The answer is { ... }."
-    return _extract_balanced_object(text)
-
-
-def _extract_balanced_object(text: str) -> str | None:
-    start = text.find("{")
-    if start == -1:
-        return None
-
-    # Walk to the matching close brace so trailing prose is discarded.
-    depth = 0
-    in_string = False
-    escaped = False
-    for index in range(start, len(text)):
-        char = text[index]
-        if in_string:
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            continue
-        if char == '"':
-            in_string = True
-        elif char == "{":
-            depth += 1
-        elif char == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : index + 1]
-    return None
