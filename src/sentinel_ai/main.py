@@ -609,8 +609,12 @@ def _install_global_hook(args: argparse.Namespace) -> int:
         )
         return EXIT_ERROR
 
+    # Recorded in the script so `doctor` only reports drift against config when
+    # config was what produced this install.
+    from_config = not args.all_repos and not args.orgs
+
     try:
-        path = install(organizations, force=args.force)
+        path = install(organizations, force=args.force, from_config=from_config)
     except (GlobalHookError, GitError) as exc:
         reporter.error(str(exc))
         return EXIT_ERROR

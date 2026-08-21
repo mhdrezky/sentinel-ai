@@ -27,6 +27,7 @@ from .config import host_data_dir
 
 HOOKS_PATH_KEY = "core.hooksPath"
 _MARKER = "# sentinel-ai:orgs="
+_SOURCE_MARKER = "# sentinel-ai:source="
 _ALL = "*"
 
 
@@ -51,28 +52,40 @@ class GlobalHookStatus:
     """Whatever `core.hooksPath` currently points at, ours or not."""
     installed_organizations: list[str] | None
     """Baked into the script. None means the script covers every repository."""
+    installed_from_config: bool
+    """The list came from `hook.organizations` rather than from `--org`/`--all`."""
     points_elsewhere: bool
     """`core.hooksPath` is set, but not to our directory."""
 
     def drifted_from(self, configured: list[str]) -> bool:
-        """Config has been edited since the script was generated.
+        """Config has been edited since a config-driven install.
 
         Worth surfacing: editing `organizations` looks like it should take
         effect immediately, and nothing about the commit output would reveal
         that the script still carries the old list.
+
+        Only meaningful when config was the source. An install that named its
+        organisations with `--org` never consulted config, so a config that
+        says something else is not drift — and telling that user to re-run
+        without the flag would send them into "no organisations configured".
+        Scripts written before this was recorded report no drift at all, which
+        is the safe answer when we cannot tell.
         """
-        if not self.installed or self.installed_organizations is None:
+        if not self.installed or not self.installed_from_config:
+            return False
+        if self.installed_organizations is None:
             return False
         return sorted(self.installed_organizations) != sorted(configured)
 
 
-def render_hook(organizations: list[str]) -> str:
+def render_hook(organizations: list[str], *, from_config: bool = False) -> str:
     """The script git will run. An empty list means every repository."""
     marker = ",".join(organizations) if organizations else _ALL
     lines = [
         "#!/bin/sh",
         "# Managed by Sentinel-AI. Regenerate with `sentinel-ai install-global-hook`.",
         f"{_MARKER}{marker}",
+        f"{_SOURCE_MARKER}{'config' if from_config else 'flags'}",
         "",
     ]
 
@@ -103,6 +116,14 @@ def parse_organizations(script: str) -> list[str] | None:
     return None
 
 
+def parse_source(script: str) -> str | None:
+    """Whether the installed list came from config or from flags."""
+    for line in script.splitlines():
+        if line.startswith(_SOURCE_MARKER):
+            return line[len(_SOURCE_MARKER) :].strip()
+    return None
+
+
 def status() -> GlobalHookStatus:
     configured_path = gitdiff.global_config(HOOKS_PATH_KEY)
     ours = _same_path(configured_path, hooks_dir())
@@ -112,11 +133,14 @@ def status() -> GlobalHookStatus:
         installed=bool(ours and script is not None),
         hooks_path=configured_path,
         installed_organizations=parse_organizations(script) if script else None,
+        installed_from_config=bool(script and parse_source(script) == "config"),
         points_elsewhere=bool(configured_path and not ours),
     )
 
 
-def install(organizations: list[str], *, force: bool = False) -> Path:
+def install(
+    organizations: list[str], *, force: bool = False, from_config: bool = False
+) -> Path:
     """Write the hook and point git's global `core.hooksPath` at it."""
     current = gitdiff.global_config(HOOKS_PATH_KEY)
     if current and not _same_path(current, hooks_dir()) and not force:
@@ -127,7 +151,11 @@ def install(organizations: list[str], *, force: bool = False) -> Path:
 
     target = hook_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(render_hook(organizations), encoding="utf-8", newline="\n")
+    target.write_text(
+        render_hook(organizations, from_config=from_config),
+        encoding="utf-8",
+        newline="\n",
+    )
     # Git checks the executable bit before running a hook.
     target.chmod(target.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 

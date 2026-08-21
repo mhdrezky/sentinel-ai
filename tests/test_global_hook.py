@@ -166,12 +166,6 @@ class TestStatusAndDrift:
         assert state.installed
         assert state.installed_organizations == ORGS
 
-    def test_detects_config_edited_after_install(self, machine: Path):
-        """Option B's one hazard: config and script can disagree silently."""
-        install(ORGS)
-        assert status().drifted_from(ORGS) is False
-        assert status().drifted_from(["acme-corp"]) is True
-
     def test_foreign_hooks_path_is_reported_not_claimed(self, machine: Path):
         subprocess.run(
             ["git", "config", "--global", HOOKS_PATH_KEY, "/elsewhere"], check=True
@@ -239,3 +233,48 @@ class TestCLI:
         main(["install-global-hook"])
         assert main(["uninstall-global-hook"]) == EXIT_PASS
         assert git_global(HOOKS_PATH_KEY) is None
+
+
+class TestDriftOnlyWhenConfigDrove:
+    """The documented rollout command passes `--org`, and the shipped config is
+    empty — so comparing the two produced a warning on every clean install, and
+    its advice ("re-run without the flag") would have failed outright."""
+
+    def test_flag_install_never_reports_drift(self, machine: Path):
+        install(ORGS, from_config=False)
+        state = status()
+        assert state.installed_organizations == ORGS
+        assert state.drifted_from([]) is False
+        assert state.drifted_from(["something-else"]) is False
+
+    def test_config_install_still_reports_drift(self, machine: Path):
+        install(ORGS, from_config=True)
+        assert status().drifted_from(ORGS) is False
+        assert status().drifted_from(["something-else"]) is True
+
+    def test_script_without_the_marker_reports_no_drift(self, machine: Path):
+        """0.3.0 and 0.3.1 wrote no source marker; silence beats a wrong warning."""
+        install(ORGS, from_config=True)
+        path = globalhook.hook_path()
+        stripped = "\n".join(
+            line
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.startswith("# sentinel-ai:source=")
+        )
+        path.write_text(stripped, encoding="utf-8", newline="\n")
+
+        assert status().drifted_from(["something-else"]) is False
+
+    def test_cli_org_flag_marks_the_install_as_flag_driven(self, machine: Path):
+        assert main(["install-global-hook", "--org", "acme-corp"]) == EXIT_PASS
+        assert status().installed_from_config is False
+        assert status().drifted_from([]) is False
+
+    def test_cli_without_flags_marks_it_config_driven(self, machine: Path, monkeypatch):
+        settings = Settings()
+        settings.hook.organizations = ["acme-corp"]
+        monkeypatch.setattr(Settings, "load", classmethod(lambda cls: settings))
+
+        assert main(["install-global-hook"]) == EXIT_PASS
+        assert status().installed_from_config is True
+        assert status().drifted_from(["moved-on"]) is True
