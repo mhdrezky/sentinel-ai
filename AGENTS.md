@@ -17,18 +17,21 @@ Default handoff: Cursor reviews → user copies `docs/context.md` → OpenCode e
 
 ## Project summary
 
-**Sentinel-AI** blocks malicious / typo-squatted / vulnerable dependencies in Husky pre-commit hooks, and reviews the staged code diff with a local model.
+**Sentinel-AI** blocks malicious / typo-squatted / vulnerable dependencies in a git pre-commit hook, and reviews the staged code diff with a local model.
 
 ```
-staged index ─┬─ manifest diff → heuristics + trivy → (gated) AI → exit 0|1
+staged index ─┬─ manifest diff → heuristics + trivy → exit 0|1
               └─ code diff → grounded AI review (network, watermark)
 ```
 
 Ecosystems: npm, PyPI, NuGet, Composer.
 
-Both layers run inside `sentinel-ai check` — the one line the Husky `pre-commit` hook calls.
+Both layers run inside `sentinel-ai check` — the one line the `pre-commit` hook calls.
 **No second hook, no per-repo install step:** a new capability reaches a machine when the
 CLI is updated. Wire new layers into `check` rather than adding hooks.
+
+The dependency side is deterministic (heuristics + Trivy). The AI stage that used to judge
+dependency changes was removed; **AI now means the diff reviewer only**.
 
 ## Config (critical)
 

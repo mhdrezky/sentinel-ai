@@ -36,6 +36,27 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         raise GitError(f"git {' '.join(args)} timed out") from exc
 
 
+def global_config(key: str) -> str | None:
+    """Read a value from the user's global git config, or None when unset."""
+    result = _run_git(["config", "--global", "--get", key], Path.home())
+    value = result.stdout.strip()
+    return value or None
+
+
+def set_global_config(key: str, value: str) -> None:
+    result = _run_git(["config", "--global", key, value], Path.home())
+    if result.returncode != 0:
+        raise GitError(f"could not set git config {key}: {result.stderr.strip()}")
+
+
+def unset_global_config(key: str) -> None:
+    """Remove a key. A key that was already absent is not an error."""
+    result = _run_git(["config", "--global", "--unset", key], Path.home())
+    # 5 is git's "key not found"; anything else is a real failure.
+    if result.returncode not in (0, 5):
+        raise GitError(f"could not unset git config {key}: {result.stderr.strip()}")
+
+
 def repo_root(start: Path | None = None) -> Path:
     """Top level of the working tree containing `start`."""
     cwd = (start or Path.cwd()).resolve()

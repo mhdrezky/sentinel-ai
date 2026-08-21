@@ -81,6 +81,20 @@ class DiffReviewConfig(BaseModel):
     log_findings: bool = False
 
 
+class HookConfig(BaseModel):
+    """The machine-wide git hook installed by `install-global-hook`.
+
+    `core.hooksPath` is global, so the hook fires in every repository on the
+    machine. `organizations` keeps it to the ones that belong to the team: the
+    generated script matches these against `remote.origin.url` and exits before
+    the CLI is even started, which is why the list is baked into the script
+    rather than read from here at commit time.
+    """
+
+    organizations: list[str] = Field(default_factory=list)
+    """Substrings matched against `remote.origin.url`. Empty means every repo."""
+
+
 class PolicyConfig(BaseModel):
     """What actually fails a commit."""
 
@@ -105,6 +119,7 @@ class Settings(BaseModel):
     trivy: TrivyConfig = Field(default_factory=TrivyConfig)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     diff_review: DiffReviewConfig = Field(default_factory=DiffReviewConfig)
+    hook: HookConfig = Field(default_factory=HookConfig)
     verbose: bool = False
 
     @classmethod

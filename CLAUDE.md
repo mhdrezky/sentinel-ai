@@ -11,13 +11,34 @@ and does not repeat what is already there.
 Sentinel-AI runs on the commit boundary and does two orthogonal things:
 
 ```
-staged index ─┬─ manifest diff → heuristics + trivy → (gated) AI → exit 0|1
+staged index ─┬─ manifest diff → heuristics + trivy → exit 0|1
               └─ code diff → grounded AI review (network, watermark)
 ```
 
-Both run inside `sentinel-ai check`, which is the single line every repo's Husky
-`pre-commit` hook calls. There is no second hook and no per-repo install step — a feature
-reaches a machine when the CLI is updated. Keep it that way when adding layers.
+Both run inside `sentinel-ai check`, the single line the `pre-commit` hook calls. There
+is no second hook and no per-repo install step — a feature reaches a machine when the CLI
+is updated. Keep it that way when adding layers.
+
+**AI means the diff reviewer, and only that.** The dependency side is deterministic:
+heuristics plus Trivy. An earlier AI stage that judged dependency changes was removed —
+do not reintroduce a model call on that path.
+
+The hook itself reaches a machine through `install-global-hook` — see below.
+
+## How the hook gets onto a machine
+
+Git never installs hooks on clone: cloning a repository must not be able to run its code.
+So a hook is per-working-copy, and with a dozen repositories across ten machines that is a
+hundred acts of remembering. It did not happen — the CLI ended up on every machine while
+the gate ran in one repository out of six.
+
+`sentinel-ai install-global-hook` sets git's global `core.hooksPath` to
+`~/.sentinel-ai/hooks`, moving that to once per machine. The generated script filters by
+`remote.origin.url` so it stays out of personal projects, and `uninstall-global-hook`
+reverses it.
+
+Husky still works where it is already set up: a repository-local `core.hooksPath` wins
+over the global one. `install-hook` (the Husky path) remains for those repositories.
 
 ## Verify before you claim done
 
@@ -104,10 +125,15 @@ Re-running the failed workflow on the same commit does not help: the commit is w
 - **Never** `uv tool install sentinel-ai` from PyPI — that name belongs to an unrelated ML
   toolkit.
 - No per-repo config. Remediation messages point at `~/.sentinel-ai/config.toml`.
-- `[diff_review]` carries its own token and timeout budget on purpose; tuning `[ai]` must
-  not move it.
+- `[ai]` is connection details only — base URL, model, credentials. Token and timeout
+  budgets live in `[diff_review]`, so tuning one cannot silently move the other.
 - Anything added to the `check` path runs on every commit for the whole team, so it must
   fail open and degrade to a warning on internal errors.
+- The generated global hook filters by `remote.origin.url` **in shell, before the CLI
+  starts**. Starting the CLI costs ~600ms against ~135ms for the shell test, and that tax
+  would land on every commit in every unrelated repository on the machine.
+- `sentinel.toml` ships in a public repository. Real organisation names belong in
+  `~/.sentinel-ai/config.toml`, never in the bundled defaults or in tests.
 
 ## Commits
 

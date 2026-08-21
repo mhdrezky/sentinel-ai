@@ -21,6 +21,7 @@ from .ai import AIUnavailable, health_check
 from .config import (
     ConfigError,
     Settings,
+    host_config_path,
     open_host_config_in_editor,
     resolved_config_paths,
 )
@@ -71,6 +72,36 @@ def build_parser() -> argparse.ArgumentParser:
     install.add_argument(
         "--repo", type=Path, default=None, help="target repository (default: cwd)"
     )
+
+    install_global = subparsers.add_parser(
+        "install-global-hook",
+        help="cover every repository on this machine with one git hook",
+    )
+    install_global.add_argument(
+        "--org",
+        dest="orgs",
+        action="append",
+        default=None,
+        metavar="NAME",
+        help="only run in repos whose origin matches NAME (repeatable; "
+        "defaults to hook.organizations in config)",
+    )
+    install_global.add_argument(
+        "--all",
+        dest="all_repos",
+        action="store_true",
+        help="run in every repository on this machine, including personal ones",
+    )
+    install_global.add_argument(
+        "--force", action="store_true", help="replace an existing core.hooksPath"
+    )
+    install_global.add_argument("--no-color", action="store_true")
+
+    uninstall_global = subparsers.add_parser(
+        "uninstall-global-hook",
+        help="remove the machine-wide git hook",
+    )
+    uninstall_global.add_argument("--no-color", action="store_true")
 
     config = subparsers.add_parser(
         "config", help="show or edit the active organisation configuration"
@@ -182,6 +213,10 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor(args)
     if args.command == "install-hook":
         return _install_hook(args)
+    if args.command == "install-global-hook":
+        return _install_global_hook(args)
+    if args.command == "uninstall-global-hook":
+        return _uninstall_global_hook(args)
     if args.command == "config":
         if getattr(args, "config_command", None) == "edit":
             return _config_edit(args)
@@ -349,6 +384,8 @@ def _doctor(args: argparse.Namespace) -> int:
             f"(looked for `{settings.trivy.binary_path}`)"
         )
 
+    _report_global_hook(reporter, settings)
+
     if not settings.ai.enabled:
         reporter.info("  ai:     [dim]disabled in config[/dim]")
         return EXIT_PASS
@@ -361,6 +398,30 @@ def _doctor(args: argparse.Namespace) -> int:
         return EXIT_BLOCK
 
     return EXIT_PASS
+
+
+def _report_global_hook(reporter: Reporter, settings: Settings) -> None:
+    from .globalhook import status
+
+    state = status()
+    if state.installed:
+        orgs = state.installed_organizations or []
+        scope = ", ".join(orgs) if orgs else "every repository"
+        reporter.info(f"  hook:   [green]global[/green] — {scope}")
+        if state.drifted_from(settings.hook.organizations):
+            # Editing the config looks like it should take effect on the next
+            # commit; nothing in the commit output would say otherwise.
+            reporter.warn(
+                "  hook.organizations has changed since the hook was written — "
+                "re-run `sentinel-ai install-global-hook` to apply it"
+            )
+    elif state.points_elsewhere:
+        reporter.info(f"  hook:   [dim]core.hooksPath -> {state.hooks_path}[/dim]")
+    else:
+        reporter.info(
+            "  hook:   [yellow]not installed globally[/yellow] "
+            "(run `sentinel-ai install-global-hook`)"
+        )
 
 
 def _config(args: argparse.Namespace) -> int:
@@ -523,6 +584,63 @@ def _install_hook(args: argparse.Namespace) -> int:
     hook_path.write_text(f"{_HOOK_LINE}\n", encoding="utf-8", newline="\n")
     hook_path.chmod(0o755)
     reporter.success(f"wrote {hook_path}")
+    return EXIT_PASS
+
+
+def _install_global_hook(args: argparse.Namespace) -> int:
+    from .globalhook import GlobalHookError, install
+
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    try:
+        settings = Settings.load()
+    except ConfigError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    if args.all_repos and args.orgs:
+        reporter.error("--all and --org cannot be combined")
+        return EXIT_ERROR
+
+    organizations = [] if args.all_repos else (args.orgs or settings.hook.organizations)
+    if not organizations and not args.all_repos:
+        reporter.error(
+            "no organisations configured — set hook.organizations in "
+            f"{host_config_path()}, pass --org NAME, or use --all"
+        )
+        return EXIT_ERROR
+
+    try:
+        path = install(organizations, force=args.force)
+    except (GlobalHookError, GitError) as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    reporter.success(f"wrote {path}")
+    if organizations:
+        reporter.info(f"  runs in repos matching: {', '.join(organizations)}")
+    else:
+        reporter.warn("  runs in EVERY repository on this machine")
+    reporter.info(
+        "[dim]Repos with their own core.hooksPath (Husky) are unaffected.[/dim]"
+    )
+    return EXIT_PASS
+
+
+def _uninstall_global_hook(args: argparse.Namespace) -> int:
+    from .globalhook import uninstall
+
+    reporter = Reporter(verbose=True, no_color=getattr(args, "no_color", False))
+    try:
+        removed = uninstall()
+    except GitError as exc:
+        reporter.error(str(exc))
+        return EXIT_ERROR
+
+    if not removed:
+        reporter.info("no machine-wide hook was installed")
+        return EXIT_PASS
+    for item in removed:
+        reporter.success(f"removed {item}")
     return EXIT_PASS
 
 

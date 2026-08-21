@@ -49,6 +49,19 @@ max_diff_bytes = 40_000
 log_file = "ai-review.jsonl"
 log_findings = false
 
+[hook]
+# Used by `sentinel-ai install-global-hook`, which sets git's global
+# core.hooksPath so every repository on the machine is covered — no per-repo
+# step. These substrings are matched against remote.origin.url so the hook
+# stays out of personal projects; the list is baked into the generated script,
+# so re-run install-global-hook after changing it.
+#
+# Empty by default: this file ships in a public repository, so put your own
+# organisation in ~/.sentinel-ai/config.toml rather than here. For example:
+#   organizations = ["mhdrezky"]
+# Or pass it at install time: sentinel-ai install-global-hook --org NAME
+organizations = []
+
 [trivy]
 # Installers set this to ~/.sentinel-ai/bin/trivy(.exe) when auto-install succeeds
 enabled = true

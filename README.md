@@ -57,9 +57,14 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
 
 Supported ecosystems: **npm**, **PyPI**, **NuGet**, **Composer**.
 
-`yarn.lock`, `pnpm-lock.yaml`, `poetry.lock` and `Pipfile.lock` are detected but
-not yet parsed — Sentinel-AI reports this as degraded coverage rather than
-staying silent about it.
+Lockfiles read in full: `package-lock.json`, `npm-shrinkwrap.json`, `composer.lock`,
+and `uv.lock`. A lockfile matters more than it looks — `pyproject.toml` holds version
+ranges, and CVE matching needs the exact resolved version, so without one Trivy has
+nothing to work with on a Python project.
+
+`yarn.lock`, `pnpm-lock.yaml`, `poetry.lock` and `Pipfile.lock` are detected but not
+yet parsed — Sentinel-AI reports this as degraded coverage rather than staying silent
+about it.
 
 ## Installing
 
@@ -92,13 +97,17 @@ Remove Sentinel-AI from this machine (host config, Trivy binary, uv tool):
 sentinel-ai uninstall --yes
 ```
 
-Does not edit Husky hooks already added to project repositories.
+Does not edit hooks already added to project repositories. Remove the machine-wide
+hook with `sentinel-ai uninstall-global-hook` first if you installed one.
 
 ## Local AI server (on-prem model)
 
-The AI review stage calls an OpenAI-compatible `/chat/completions` endpoint
-(vLLM, Ollama, TGI, etc.). Point it at your internal deployment before enabling
-the hook in production repos.
+The AI reviews the staged **code diff** — new outbound URLs, and AI attribution left
+in the source. Dependencies are checked deterministically by heuristics and Trivy, with
+no model involved.
+
+It calls an OpenAI-compatible `/chat/completions` endpoint (vLLM, Ollama, TGI, etc.).
+Point it at your internal deployment before enabling the hook in production repos.
 
 **1. Open host config:**
 
@@ -115,12 +124,21 @@ with your server:
 ```toml
 [ai]
 enabled = true
-base_url = "http://10.65.1.119:5003/v1"
+base_url = "http://your-model-host:5003/v1"
 model = "Qwen/Qwen3.6-35B-A3B-FP8"
-timeout_seconds = 20.0
-max_output_tokens = 2048
-fail_open = true
 enable_thinking = false
+```
+
+`[ai]` holds connection details only. The review's own limits live in `[diff_review]`,
+so changing one cannot silently move the other:
+
+```toml
+[diff_review]
+enabled = true
+fail_open = true
+max_output_tokens = 256
+timeout_seconds = 12.0
+max_diff_bytes = 40_000
 ```
 
 Use your actual host, port, and model name. The URL must include the `/v1`
@@ -185,49 +203,82 @@ you pass `--no-trivy`).
 If Trivy is missing or misconfigured, Sentinel-AI warns and continues without
 CVE checks by default (`trivy.enabled = true` but binary not found).
 
-## Installing into a repository
+## Installing the hook
 
-Sentinel-AI must be on `PATH` (`sentinel-ai doctor`). Then wire Husky in the
-project you want to protect:
+Sentinel-AI must be on `PATH` first — check with `sentinel-ai doctor`.
 
-**1. Install and initialise Husky** (from the repository root):
+Git never installs hooks when you clone: a repository must not be able to run code on
+you just for cloning it. So a hook has to be set up once per working copy. Across a
+dozen repositories and several machines that rarely happens, which is why the
+recommended route sets it up **once per machine** instead.
+
+### Recommended: one hook for every repository on the machine
+
+```bash
+sentinel-ai install-global-hook --org your-org
+```
+
+This writes `~/.sentinel-ai/hooks/pre-commit` and points git's global `core.hooksPath`
+at it. Every repository on the machine is then covered — including ones cloned later —
+with no per-repository step and no npm.
+
+`--org` is matched against `remote.origin.url`, so the hook stays out of personal
+projects. It is repeatable, and the check runs in shell before the CLI starts, so an
+unrelated commit costs milliseconds rather than a second. Repositories with no `origin`
+are skipped.
+
+Set the default once instead of passing the flag every time:
+
+```toml
+# ~/.sentinel-ai/config.toml
+[hook]
+organizations = ["your-org"]
+```
+
+Then `sentinel-ai install-global-hook` needs no arguments. There is no default in the
+shipped config — the file lives in a public repository, so your organisation name
+belongs in the host config.
+
+To cover **every** repository on the machine, personal ones included:
+
+```bash
+sentinel-ai install-global-hook --all
+```
+
+To reverse it:
+
+```bash
+sentinel-ai uninstall-global-hook
+```
+
+Two things worth knowing. `core.hooksPath` replaces the whole hooks directory, so a
+hand-written `.git/hooks/pre-push` stops running. And after editing
+`hook.organizations` you must re-run the install command — the list is baked into the
+generated script; `sentinel-ai doctor` warns when the two have drifted apart.
+
+### Alternative: per-repository with Husky
+
+For a repository that already uses Husky, or where you want the hook visible in the
+project itself:
 
 ```bash
 npm install --save-dev husky
 npx husky init
-```
-
-`husky init` creates `.husky/pre-commit` with a sample command. Append Sentinel-AI
-to it:
-
-```bash
 sentinel-ai install-hook
 ```
 
-The command adds `sentinel-ai check || exit 1` when it is not already present.
-If the line is already there, it reports that and exits successfully.
+`install-hook` appends `sentinel-ai check || exit 1` to `.husky/pre-commit`, or reports
+that it is already present. You can also add that line by hand.
 
-**2. Or edit the pre-commit hook manually.**
+A repository-local `core.hooksPath` — which is what Husky sets — wins over the global
+one, so the two do not fight.
 
-Append this line to `.husky/pre-commit` (or replace the sample command):
-
-```sh
-sentinel-ai check || exit 1
-```
-
-**3. Verify** from the repository root:
+### Verify
 
 ```bash
 sentinel-ai doctor
-sentinel-ai config
 git add .
 git commit -m "test: sentinel-ai hook"
-```
-
-On Windows, edit with:
-
-```powershell
-notepad .husky\pre-commit
 ```
 
 ## Configuration
@@ -239,7 +290,7 @@ Defaults ship with the package. Each host overrides via:
 ```
 
 Created automatically on first install (`install.ps1` / `install.sh`) from the package's bundled `sentinel.toml`.
-Protected repositories only need the Husky hook.
+Protected repositories need no configuration of their own.
 
 Inspect the active configuration:
 
@@ -275,14 +326,17 @@ sentinel-ai check              scan the staged index (the hook's default)
 sentinel-ai check --all        scan every manifest on disk
 sentinel-ai check --range A..B scan the changes between two refs
 sentinel-ai check --json       machine-readable report on stdout
-sentinel-ai check --no-ai      skip the AI review stage
+sentinel-ai check --no-ai      skip the AI diff review
 sentinel-ai check --strict     block when Sentinel-AI or the model server fails
-sentinel-ai doctor             check Trivy and the on-prem model server
+sentinel-ai diff-review        review the staged code diff on its own
+sentinel-ai doctor             check Trivy, the model server, and the hook
 sentinel-ai config             show the active organisation configuration
 sentinel-ai config edit        open host config in the default editor
 sentinel-ai update             upgrade the installed CLI from GitHub
 sentinel-ai uninstall --yes    remove CLI and ~/.sentinel-ai from this host
-sentinel-ai install-hook       append sentinel-ai to Husky pre-commit
+sentinel-ai install-hook             append sentinel-ai to a Husky pre-commit
+sentinel-ai install-global-hook      cover every repo on this machine
+sentinel-ai uninstall-global-hook    undo the machine-wide hook
 ```
 
 ## Failure behaviour
@@ -291,13 +345,13 @@ The defaults keep a broken dependency out, but do not let Sentinel-AI's own
 problems freeze the team:
 
 * **Model server unreachable** → warn, keep the deterministic findings, allow the
-  commit (`ai.fail_open = true`).
+  commit (`diff_review.fail_open = true`).
 * **Trivy missing** → warn, skip CVE checks, continue.
 * **Internal error** → warn loudly that dependencies were *not* verified,
   allow the commit.
 
-`--strict` (or `ai.fail_open = false`) inverts all three for environments where
-an unverified commit is the worse outcome.
+`--strict` (or `diff_review.fail_open = false`) inverts all three for environments
+where an unverified commit is the worse outcome.
 
 Findings carry text from CVE advisories and from the model, so the report is
 transliterated to ASCII on consoles that cannot encode it, and untrusted detail
@@ -312,8 +366,11 @@ is never parsed as terminal markup.
   Trivy and run `sentinel-ai doctor`, then `check --verbose` on a repo with a
   known-vulnerable lockfile.
 * `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock` and `Pipfile.lock` are detected
-  but not parsed. Repos using them get manifest-level coverage only, and the
-  gap is reported at runtime.
+  but not parsed. Repos using them get manifest-level coverage only — direct
+  dependencies but no transitive ones — and the gap is reported at runtime.
+* Legacy .NET projects keep their dependencies in `packages.config`; a non-SDK
+  `.csproj` carries assembly references rather than `PackageReference`, so a
+  project without a `packages.config` contributes nothing.
 * The typo-squat baseline is a small curated list, not registry download
   counts. It catches impersonation of well-known packages; it will not catch a
   squat on an obscure internal dependency.
