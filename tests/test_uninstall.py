@@ -40,7 +40,9 @@ class TestRunUninstall:
         assert not host_dir.exists()
         assert str(host_dir) in removed
         assert "uv tool: sentinel-ai" in removed
-        run.assert_called_once_with(
+        # Not `assert_called_once`: removing the global hook asks git about
+        # core.hooksPath first, so the uv call is one of several.
+        run.assert_any_call(
             ["/usr/bin/uv", "tool", "uninstall", "sentinel-ai"],
             capture_output=True,
             text=True,
@@ -90,3 +92,32 @@ class TestUninstallCommand:
         ):
             assert main(["uninstall", "--yes", "--no-color"]) == EXIT_PASS
         assert not host_dir.exists()
+
+
+class TestGlobalHookCleanup:
+    def test_uninstall_unsets_the_global_hooks_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """The hook lives inside ~/.sentinel-ai, so removing the directory
+        without unsetting core.hooksPath would leave git pointing at nothing."""
+        from sentinel_ai import globalhook
+
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
+        monkeypatch.setattr(
+            "sentinel_ai.config.host_data_dir", lambda: home / ".sentinel-ai"
+        )
+        monkeypatch.setattr(globalhook, "host_data_dir", lambda: home / ".sentinel-ai")
+        monkeypatch.setattr(
+            "sentinel_ai.uninstall.host_data_dir", lambda: home / ".sentinel-ai"
+        )
+
+        globalhook.install(["acme-corp"])
+        assert globalhook.status().installed
+
+        with patch("sentinel_ai.uninstall._uv_binary", return_value=None):
+            removed = run_uninstall(yes=True)
+
+        assert any("core.hooksPath" in item for item in removed)
+        assert globalhook.status().installed is False

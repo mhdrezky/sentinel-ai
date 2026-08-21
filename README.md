@@ -91,14 +91,54 @@ Upgrade an existing install:
 sentinel-ai update
 ```
 
-Remove Sentinel-AI from this machine (host config, Trivy binary, uv tool):
+**On Windows, use the installer above instead.** The CLI runs from inside the
+environment uv would replace, and Windows locks the running interpreter — but uv
+deletes the packages before it reaches that lock, so a failed self-update leaves no
+working CLI at all rather than the previous version. From 0.3.1 the command refuses
+and prints the way out; before that it simply breaks, and the repair is:
+
+```powershell
+uv tool install --force "git+https://github.com/mhdrezky/sentinel-ai.git@v0.3.1"
+```
+
+Remove Sentinel-AI from this machine — host config, Trivy binary, the machine-wide
+hook, and the uv tool:
 
 ```bash
 sentinel-ai uninstall --yes
 ```
 
-Does not edit hooks already added to project repositories. Remove the machine-wide
-hook with `sentinel-ai uninstall-global-hook` first if you installed one.
+It unsets `core.hooksPath` when `install-global-hook` was the one that set it, and
+leaves it alone when something else owns it. Hooks added to project repositories —
+Husky and the like — are never touched.
+
+On Windows the last step cannot finish from inside the CLI: the running interpreter
+lives in the environment being removed, and Windows locks it. Everything else is
+removed and the command tells you to finish with `uv tool uninstall sentinel-ai`.
+
+### Removing it by hand
+
+Versions before 0.3.1 have no `uninstall` command. This is the same work:
+
+**Windows (PowerShell):**
+
+```powershell
+git config --global --unset core.hooksPath
+uv tool uninstall sentinel-ai
+Remove-Item -Recurse -Force "$env:USERPROFILE\.sentinel-ai"
+```
+
+**macOS / Linux:**
+
+```bash
+git config --global --unset core.hooksPath
+uv tool uninstall sentinel-ai
+rm -rf ~/.sentinel-ai
+```
+
+Skip the first line unless you ran `install-global-hook` — unlike the command, it
+does not check who set `core.hooksPath` before clearing it, so it would also
+disconnect another tool that relies on it.
 
 ## Local AI server (on-prem model)
 
@@ -332,7 +372,7 @@ sentinel-ai diff-review        review the staged code diff on its own
 sentinel-ai doctor             check Trivy, the model server, and the hook
 sentinel-ai config             show the active organisation configuration
 sentinel-ai config edit        open host config in the default editor
-sentinel-ai update             upgrade the installed CLI from GitHub
+sentinel-ai update             upgrade the CLI (not on Windows — see above)
 sentinel-ai uninstall --yes    remove CLI and ~/.sentinel-ai from this host
 sentinel-ai install-hook             append sentinel-ai to a Husky pre-commit
 sentinel-ai install-global-hook      cover every repo on this machine

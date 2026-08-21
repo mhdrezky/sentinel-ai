@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -16,6 +17,40 @@ INSTALL_TIMEOUT = 300
 
 class UpdateError(Exception):
     """Update could not complete."""
+
+
+def running_from_uv_tool_env() -> Path | None:
+    """The uv tool environment this process runs out of, if it is one.
+
+    `uv-receipt.toml` is written by uv into the environment root, so its
+    presence beside `sys.prefix` is the reliable signal.
+    """
+    prefix = Path(sys.prefix)
+    return prefix if (prefix / "uv-receipt.toml").is_file() else None
+
+
+def _refuse_self_replacement(install_args: list[str]) -> None:
+    """Windows cannot replace the environment it is executing from.
+
+    The running `python.exe` lives in the tool environment's `Scripts`
+    directory and Windows locks it, but uv deletes `Lib/site-packages` before
+    it reaches that lock — so a failed self-update does not leave the old
+    version in place, it leaves no version at all. Refusing costs the user one
+    copied command; not refusing costs them a working CLI.
+    """
+    if sys.platform != "win32" or running_from_uv_tool_env() is None:
+        return
+    installer = (
+        "https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1"
+    )
+    raise UpdateError(
+        "Sentinel-AI cannot update itself on Windows: this command runs from "
+        "inside the environment uv would replace, and a partial replacement "
+        "leaves the CLI unusable. Run one of these from a normal terminal "
+        "instead — "
+        f"uv tool install --force {' '.join(install_args)} — or "
+        f"irm {installer} | iex"
+    )
 
 
 def fetch_latest_release_tag() -> str:
@@ -52,6 +87,8 @@ def _uv_tool_install(install_args: list[str]) -> None:
             "uv is not on PATH. Re-run the Sentinel-AI installer or install uv "
             "from https://docs.astral.sh/uv/"
         )
+
+    _refuse_self_replacement(install_args)
 
     command = [uv, "tool", "install", "--force", *install_args]
     try:
