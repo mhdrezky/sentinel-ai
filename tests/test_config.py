@@ -29,7 +29,7 @@ def test_bundled_defaults(no_host_config: None) -> None:
 
     assert settings.ai.base_url == "http://localhost:8000/v1"
     assert settings.ai.model == "local-model"
-    assert settings.ai.max_output_tokens == 2048
+    assert settings.diff_review.max_output_tokens == 256
 
 
 def test_global_config_overrides_bundled(

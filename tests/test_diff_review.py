@@ -16,12 +16,17 @@ import pytest
 from sentinel_ai.config import AIConfig, DiffReviewConfig, Settings
 from sentinel_ai.decision_engine import EXIT_BLOCK, EXIT_PASS
 from sentinel_ai.diff_review.client import DiffReviewClient, parse_diff_verdict
-from sentinel_ai.diff_review.diff import collect
-from sentinel_ai.diff_review.engine import _recompute, run_diff_review
+from sentinel_ai.diff_review.diff import StagedDiff, collect
+from sentinel_ai.diff_review.engine import (
+    _recompute,
+    review_staged,
+    run_diff_review,
+)
 from sentinel_ai.diff_review.grounding import added_lines, ground, normalise
 from sentinel_ai.diff_review.models import (
     DiffCategory,
     DiffFinding,
+    SkipReason,
     Verdict,
     append_log,
 )
@@ -494,7 +499,6 @@ class TestCheckIntegration:
     ):
         """Manifests are filtered out, so this costs nothing extra."""
         monkeypatch.setattr(Settings, "load", classmethod(lambda cls: _settings()))
-        monkeypatch.setattr("sentinel_ai.main._maybe_analyse", lambda *a, **k: None)
         stage(repo, "package.json", '{"dependencies": {"left-pad": "1.0.0"}}\n')
 
         self._check(repo)
@@ -536,13 +540,20 @@ class TestCheckIntegration:
 
 
 class TestBudgetIsolation:
-    def test_diff_review_does_not_inherit_ai_limits(self):
-        """The whole point of a separate section: Phase 2 must not move these."""
+    def test_budgets_live_with_the_feature_not_the_connection(self):
+        """`[ai]` carries connection details only; the budget belongs here."""
         settings = Settings()
-        assert settings.ai.max_output_tokens == 2048
-        assert settings.ai.timeout_seconds == 20.0
         assert settings.diff_review.max_output_tokens == 256
         assert settings.diff_review.timeout_seconds == 12.0
+        assert not hasattr(settings.ai, "max_output_tokens")
+        assert not hasattr(settings.ai, "timeout_seconds")
+
+    def test_ai_enabled_is_the_master_switch(self):
+        """Turning off `[ai]` must silence every AI stage, not just some."""
+        settings = _settings()
+        settings.ai.enabled = False
+        outcome = review_staged(Path("."), settings, staged=StagedDiff(text="x"))
+        assert outcome.skipped is SkipReason.DISABLED
 
     def test_bundled_toml_populates_the_section(self):
         """Without a model on `Settings`, `[diff_review]` would vanish silently."""

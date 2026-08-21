@@ -77,7 +77,6 @@ class FindingSource(StrEnum):
 
     TRIVY = "trivy"
     HEURISTIC = "heuristic"
-    AI = "ai"
     POLICY = "policy"
 
 
@@ -112,30 +111,6 @@ class Finding(BaseModel):
     remediation: str | None = None
     reference: str | None = None
     """CVE id, advisory URL, or similar."""
-
-
-class PackageVerdict(BaseModel):
-    """The model's judgement on one specific package."""
-
-    name: str
-    risk_level: Severity = Severity.NONE
-    reason: str = ""
-
-
-class AIVerdict(BaseModel):
-    """Structured response from the on-prem model server.
-
-    Field names mirror the JSON schema pinned in the prompt so the model's
-    raw output validates directly into this type.
-    """
-
-    risk_level: Severity = Severity.NONE
-    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
-    summary: str = ""
-    indicators: list[str] = Field(default_factory=list)
-    """Concrete observations, e.g. "postinstall curls an external IP"."""
-    recommended_action: str = ""
-    packages: list[PackageVerdict] = Field(default_factory=list)
 
 
 class ScanResult(BaseModel):

@@ -94,7 +94,9 @@ def review_staged(
         )
         return outcome
 
-    if not config.enabled:
+    if not config.enabled or not settings.ai.enabled:
+        # `[ai].enabled` is the master switch for every AI stage; `[diff_review]`
+        # turns off this one alone.
         return done(Verdict.PASS, skipped=SkipReason.DISABLED)
     if staged.is_empty:
         # A dependency-only commit costs nothing here: no model call at all.

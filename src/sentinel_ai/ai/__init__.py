@@ -1,5 +1,5 @@
-"""On-prem model integration."""
+"""Shared model-server plumbing. The reviewer that uses it lives in `diff_review`."""
 
-from .client import AIClient, AIUnavailable, parse_verdict
+from .client import AIUnavailable, health_check
 
-__all__ = ["AIClient", "AIUnavailable", "parse_verdict"]
+__all__ = ["AIUnavailable", "health_check"]

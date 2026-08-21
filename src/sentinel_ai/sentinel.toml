@@ -22,13 +22,12 @@ allowlist = []
 denylist = []
 
 [ai]
-# Override base_url and model in ~/.sentinel-ai/config.toml on each host
+# How to reach the model server. Override base_url and model in
+# ~/.sentinel-ai/config.toml on each host. Turning this off disables every
+# AI stage; the budgets themselves live in [diff_review].
 enabled = true
 base_url = "http://localhost:8000/v1"
 model = "local-model"
-timeout_seconds = 20.0
-max_output_tokens = 2048
-fail_open = true
 enable_thinking = false
 
 [diff_review]

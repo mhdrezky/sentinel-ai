@@ -17,17 +17,15 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import __version__
-from .ai import AIClient, AIUnavailable
+from .ai import AIUnavailable, health_check
 from .config import (
     ConfigError,
     Settings,
     open_host_config_in_editor,
     resolved_config_paths,
 )
-from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide, requires_ai_review
+from .decision_engine import EXIT_BLOCK, EXIT_ERROR, EXIT_PASS, decide
 from .gitdiff import GitError, repo_root
-from .manifests import ParsedManifest
-from .models import AIVerdict, ScanResult, Severity
 from .reporting import Reporter, to_json
 from .scanner import Scanner, SourceRevision, trivy_version
 
@@ -217,8 +215,6 @@ def _check(args: argparse.Namespace) -> int:
         settings.ai.enabled = False
     if args.no_trivy:
         settings.trivy.enabled = False
-    if args.strict:
-        settings.ai.fail_open = False
 
     revision = _revision_from(args)
 
@@ -246,14 +242,13 @@ def _check(args: argparse.Namespace) -> int:
     # short-circuit here.
     if not scan.changes and not scan.findings:
         if args.json:
-            decision = decide(scan, None, settings.policy)
+            decision = decide(scan, settings.policy)
             print(to_json(decision, scan))
         elif args.verbose:
             reporter.success("Sentinel-AI: no dependency changes")
         return _with_diff_review(EXIT_PASS, diff_outcome)
 
-    verdict = _maybe_analyse(scan, scanner.parsed_manifests, settings, reporter)
-    decision = decide(scan, verdict, settings.policy)
+    decision = decide(scan, settings.policy)
 
     if args.json:
         print(to_json(decision, scan))
@@ -303,39 +298,6 @@ def _with_diff_review(exit_code: int, outcome: DiffReviewOutcome | None) -> int:
     if outcome is not None and outcome.blocks and exit_code == EXIT_PASS:
         return EXIT_BLOCK
     return exit_code
-
-
-def _maybe_analyse(
-    scan: ScanResult,
-    parsed_manifests: dict[str, ParsedManifest],
-    settings: Settings,
-    reporter: Reporter,
-) -> AIVerdict | None:
-    """Run the AI review stage when it is enabled and the triage gate says it helps."""
-    if not settings.ai.enabled:
-        return None
-    if not requires_ai_review(scan, settings.policy):
-        return None
-
-    try:
-        return AIClient(settings.ai).analyse(
-            scan.changes, scan.findings, parsed_manifests
-        )
-    except AIUnavailable as exc:
-        if settings.ai.fail_open:
-            scan.degraded_reasons.append(
-                f"AI review skipped — {exc}. Deterministic checks still ran."
-            )
-            return None
-        # fail-closed: surface it as a blocking verdict rather than a silent pass.
-        return AIVerdict(
-            risk_level=Severity.HIGH,
-            confidence=1.0,
-            summary=f"AI review could not complete and strict mode is on: {exc}",
-            recommended_action=(
-                "Start the model server, or re-run with --no-ai if the outage is expected."
-            ),
-        )
 
 
 def _revision_from(args: argparse.Namespace) -> SourceRevision:
@@ -392,7 +354,7 @@ def _doctor(args: argparse.Namespace) -> int:
         return EXIT_PASS
 
     try:
-        status = AIClient(settings.ai).health_check()
+        status = health_check(settings.ai)
         reporter.info(f"  ai:     [green]{status}[/green] at {settings.ai.base_url}")
     except AIUnavailable as exc:
         reporter.info(f"  ai:     [red]unavailable[/red] — {exc}")
@@ -424,8 +386,12 @@ def _config(args: argparse.Namespace) -> int:
             "enabled": settings.ai.enabled,
             "base_url": settings.ai.base_url,
             "model": settings.ai.model,
-            "max_output_tokens": settings.ai.max_output_tokens,
-            "fail_open": settings.ai.fail_open,
+        },
+        "diff_review": {
+            "enabled": settings.diff_review.enabled,
+            "max_output_tokens": settings.diff_review.max_output_tokens,
+            "timeout_seconds": settings.diff_review.timeout_seconds,
+            "fail_open": settings.diff_review.fail_open,
         },
         "trivy": {
             "enabled": settings.trivy.enabled,

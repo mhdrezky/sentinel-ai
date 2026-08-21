@@ -29,26 +29,21 @@ HOST_CONFIG_FILENAME = "config.toml"
 
 
 class AIConfig(BaseModel):
-    """On-prem model server.
+    """How to reach the on-prem model server.
+
+    Connection details only. The one feature that calls the model — the staged
+    diff review — owns its own token and timeout budget in `DiffReviewConfig`,
+    so tuning one cannot silently move the other.
 
     Assumes an OpenAI-compatible `/chat/completions` endpoint, which is what
-    vLLM, Ollama, llama.cpp, and TGI all expose. Point `base_url` and `model`
-    at your deployment.
+    vLLM, Ollama, llama.cpp, and TGI all expose.
     """
 
     enabled: bool = True
     base_url: str = "http://localhost:8000/v1"
     model: str = "local-model"
     api_key: str | None = None
-    timeout_seconds: float = 20.0
-    max_output_tokens: int = 2048
     temperature: float = 0.0
-    fail_open: bool = True
-    """If the server is unreachable, warn and continue rather than block.
-
-    Left on by default so an AI outage cannot freeze every developer's commits.
-    Turn off for hardened environments where an unverifiable package must fail.
-    """
     enable_thinking: bool = False
     """Qwen3/vLLM thinking mode. Off by default — thinking output breaks JSON parsing."""
 
@@ -132,8 +127,6 @@ class Settings(BaseModel):
             self.ai.model = model
         if (api_key := env.get("SENTINEL_AI_API_KEY")) is not None:
             self.ai.api_key = api_key
-        if (timeout := _env_float(env, "SENTINEL_AI_TIMEOUT")) is not None:
-            self.ai.timeout_seconds = timeout
         if (enabled := _env_bool(env, "SENTINEL_AI_ENABLED")) is not None:
             self.ai.enabled = enabled
 

@@ -37,7 +37,6 @@ _SEVERITY_STYLE: dict[Severity, str] = {
 _SOURCE_LABEL: dict[FindingSource, str] = {
     FindingSource.TRIVY: "trivy",
     FindingSource.HEURISTIC: "heuristic",
-    FindingSource.AI: "ai review",
     FindingSource.POLICY: "policy",
 }
 
