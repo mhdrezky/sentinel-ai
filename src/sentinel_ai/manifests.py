@@ -33,7 +33,6 @@ UNPARSED_LOCKFILES: dict[str, Ecosystem] = {
     "pnpm-lock.yaml": Ecosystem.NPM,
     "poetry.lock": Ecosystem.PYPI,
     "Pipfile.lock": Ecosystem.PYPI,
-    "uv.lock": Ecosystem.PYPI,
     "packages.lock.json": Ecosystem.NUGET,
 }
 
@@ -103,6 +102,8 @@ def parse(path: str, content: str) -> ParsedManifest | None:
             return _parse_composer_lock(content)
         if name == "pyproject.toml":
             return _parse_pyproject(content)
+        if name == "uv.lock":
+            return _parse_uv_lock(content)
         if _REQUIREMENTS_RE.match(name):
             return _parse_requirements(content)
         if name == "packages.config":
@@ -313,6 +314,52 @@ def _parse_csproj(content: str) -> ParsedManifest:
     return ParsedManifest(ecosystem=Ecosystem.NUGET, dependencies=deps)
 
 
+def _parse_uv_lock(content: str) -> ParsedManifest:
+    """The resolved dependency tree from uv's lockfile.
+
+    Worth parsing because `pyproject.toml` alone gives Trivy nothing to work
+    with: it holds ranges, and CVE matching needs the exact resolved version.
+    Everything here is marked indirect, as with the other lockfiles — direct
+    dependencies are already covered by the `pyproject.toml` sitting beside it.
+
+    Workspace members carry an `editable` or `virtual` source and are skipped:
+    a project is not a dependency of itself.
+    """
+    data = tomllib.loads(content)
+    deps: dict[str, str] = {}
+
+    for entry in data.get("package") or []:
+        if not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        if not name:
+            continue
+        source = entry.get("source")
+        source = source if isinstance(source, dict) else {}
+        if _UV_WORKSPACE_SOURCES & source.keys():
+            continue
+        deps[str(name)] = _uv_version(entry, source)
+
+    return ParsedManifest(ecosystem=Ecosystem.PYPI, dependencies=deps, is_lockfile=True)
+
+
+def _uv_version(entry: dict, source: dict) -> str:
+    """Resolved version, or the origin when the package bypasses the registry.
+
+    uv keeps the version in `version` and the origin in `source`, so the two
+    would never meet and `_check_nonregistry_source` — which reads the version
+    string — would never fire. Local paths are normalised to a `file:` form,
+    the same spelling npm and pip use for the same idea.
+    """
+    for key in ("git", "url"):
+        if origin := source.get(key):
+            return str(origin)
+    for key in ("path", "directory"):
+        if origin := source.get(key):
+            return f"file:{origin}"
+    return str(entry.get("version", "*"))
+
+
 def _parse_packages_config(content: str) -> ParsedManifest:
     root = ElementTree.fromstring(content)
     deps: dict[str, str] = {}
@@ -368,10 +415,14 @@ _EXACT_MATCHES: dict[str, Ecosystem] = {
     "package-lock.json": Ecosystem.NPM,
     "npm-shrinkwrap.json": Ecosystem.NPM,
     "pyproject.toml": Ecosystem.PYPI,
+    "uv.lock": Ecosystem.PYPI,
     "packages.config": Ecosystem.NUGET,
     "composer.json": Ecosystem.COMPOSER,
     "composer.lock": Ecosystem.COMPOSER,
 }
+
+# A uv workspace member is the project itself, not something it depends on.
+_UV_WORKSPACE_SOURCES = frozenset({"editable", "virtual"})
 
 _VENDOR_DIRS = frozenset(
     {"node_modules", "vendor", "bower_components", "site-packages", ".venv", "venv"}

@@ -215,7 +215,61 @@ class TestUnparsedLockfiles:
         assert not manifests.is_parseable("yarn.lock")
         assert manifests.parse("yarn.lock", "whatever") is None
 
-    def test_uv_lock_is_identified_but_not_parseable(self):
-        assert manifests.identify("uv.lock") is Ecosystem.PYPI
-        assert not manifests.is_parseable("uv.lock")
-        assert manifests.parse("uv.lock", "whatever") is None
+
+class TestUvLock:
+    LOCK = """
+version = 1
+requires-python = ">=3.13"
+
+[[package]]
+name = "my-app"
+version = "0.1.0"
+source = { editable = "." }
+
+[[package]]
+name = "httpx"
+version = "0.28.1"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "internal-sdk"
+version = "2.0.0"
+source = { git = "https://github.example.com/acme/sdk?rev=deadbeef" }
+
+[[package]]
+name = "local-helper"
+version = "0.3.0"
+source = { directory = "../helper" }
+"""
+
+    def test_pins_exact_versions(self):
+        """The reason to parse it at all: Trivy needs resolved versions."""
+        parsed = manifests.parse("uv.lock", self.LOCK)
+        assert parsed.ecosystem is Ecosystem.PYPI
+        assert parsed.is_lockfile
+        assert parsed.dependencies["httpx"] == "0.28.1"
+
+    def test_workspace_member_is_not_a_dependency(self):
+        parsed = manifests.parse("uv.lock", self.LOCK)
+        assert "my-app" not in parsed.dependencies
+
+    def test_git_source_replaces_the_version(self):
+        """`_check_nonregistry_source` reads the version string, not `source`."""
+        parsed = manifests.parse("uv.lock", self.LOCK)
+        assert parsed.dependencies["internal-sdk"].startswith(
+            "https://github.example.com"
+        )
+
+    def test_local_directory_is_normalised_to_a_file_url(self):
+        parsed = manifests.parse("uv.lock", self.LOCK)
+        assert parsed.dependencies["local-helper"] == "file:../helper"
+
+    def test_everything_counts_as_indirect(self):
+        """pyproject.toml beside it already carries the direct dependencies."""
+        changes = manifests.diff_manifests("uv.lock", None, self.LOCK)
+        assert changes
+        assert not any(change.is_direct for change in changes)
+
+    def test_broken_toml_returns_none(self):
+        """A lock half-written by a concurrent `uv` run must not crash the hook."""
+        assert manifests.parse("uv.lock", "[[package]\nname =") is None
