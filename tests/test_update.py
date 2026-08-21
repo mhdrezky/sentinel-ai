@@ -110,7 +110,12 @@ class TestSelfReplacementGuard:
         self._tool_env(tmp_path, monkeypatch)
         monkeypatch.setattr("sentinel_ai.update.sys.platform", "win32")
 
-        with pytest.raises(UpdateError) as excinfo:
+        # Nothing is patched out: the refusal has to happen before the release
+        # lookup, or a rate-limited API turns it into an unrelated error.
+        with (
+            patch("sentinel_ai.update.urlopen", side_effect=AssertionError("network")),
+            pytest.raises(UpdateError) as excinfo,
+        ):
             run_update(source=None)
 
         message = str(excinfo.value)

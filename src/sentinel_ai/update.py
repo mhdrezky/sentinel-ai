@@ -29,7 +29,7 @@ def running_from_uv_tool_env() -> Path | None:
     return prefix if (prefix / "uv-receipt.toml").is_file() else None
 
 
-def _refuse_self_replacement(install_args: list[str]) -> None:
+def _refuse_self_replacement(install_args: list[str] | None) -> None:
     """Windows cannot replace the environment it is executing from.
 
     The running `python.exe` lives in the tool environment's `Scripts`
@@ -37,19 +37,28 @@ def _refuse_self_replacement(install_args: list[str]) -> None:
     it reaches that lock — so a failed self-update does not leave the old
     version in place, it leaves no version at all. Refusing costs the user one
     copied command; not refusing costs them a working CLI.
+
+    Called before the release lookup, so the refusal does not depend on GitHub
+    being reachable — an unauthenticated API call is rate-limited often enough
+    that the answer would otherwise be "could not reach GitHub" on a machine
+    that was never going to be able to update anyway.
     """
     if sys.platform != "win32" or running_from_uv_tool_env() is None:
         return
+
     installer = (
         "https://github.com/mhdrezky/sentinel-ai/releases/latest/download/install.ps1"
+    )
+    manual = (
+        f"uv tool install --force {' '.join(install_args)}"
+        if install_args
+        else f"uv tool install --force git+https://github.com/{GITHUB_REPO}.git@TAG"
     )
     raise UpdateError(
         "Sentinel-AI cannot update itself on Windows: this command runs from "
         "inside the environment uv would replace, and a partial replacement "
-        "leaves the CLI unusable. Run one of these from a normal terminal "
-        "instead — "
-        f"uv tool install --force {' '.join(install_args)} — or "
-        f"irm {installer} | iex"
+        "leaves the CLI unusable. Run this from a normal terminal instead — "
+        f"irm {installer} | iex — or {manual}"
     )
 
 
@@ -72,9 +81,12 @@ def run_update(*, source: Path | None = None) -> str:
         resolved = source.resolve()
         if not resolved.is_dir():
             raise UpdateError(f"source path not found: {source}")
-        _uv_tool_install(["--from", str(resolved), "sentinel-ai"])
+        args = ["--from", str(resolved), "sentinel-ai"]
+        _refuse_self_replacement(args)
+        _uv_tool_install(args)
         return str(resolved)
 
+    _refuse_self_replacement(None)
     tag = fetch_latest_release_tag()
     _uv_tool_install([f"git+https://github.com/{GITHUB_REPO}.git@{tag}"])
     return tag
@@ -87,8 +99,6 @@ def _uv_tool_install(install_args: list[str]) -> None:
             "uv is not on PATH. Re-run the Sentinel-AI installer or install uv "
             "from https://docs.astral.sh/uv/"
         )
-
-    _refuse_self_replacement(install_args)
 
     command = [uv, "tool", "install", "--force", *install_args]
     try:
