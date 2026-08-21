@@ -19,6 +19,7 @@ class TestIdentify:
             ("requirements.txt", Ecosystem.PYPI),
             ("requirements-dev.txt", Ecosystem.PYPI),
             ("pyproject.toml", Ecosystem.PYPI),
+            ("uv.lock", Ecosystem.PYPI),
             ("src/Api/Api.csproj", Ecosystem.NUGET),
             ("packages.config", Ecosystem.NUGET),
             ("composer.json", Ecosystem.COMPOSER),
@@ -213,3 +214,8 @@ class TestUnparsedLockfiles:
         assert manifests.identify("yarn.lock") is Ecosystem.NPM
         assert not manifests.is_parseable("yarn.lock")
         assert manifests.parse("yarn.lock", "whatever") is None
+
+    def test_uv_lock_is_identified_but_not_parseable(self):
+        assert manifests.identify("uv.lock") is Ecosystem.PYPI
+        assert not manifests.is_parseable("uv.lock")
+        assert manifests.parse("uv.lock", "whatever") is None

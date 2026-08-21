@@ -22,11 +22,18 @@ from .models import ChangeType, Ecosystem, PackageChange
 
 # Lockfiles we can spot but not yet read. Surfaced as a degraded-mode warning
 # rather than silently ignored, so nobody assumes they were checked.
+#
+# Being listed here also keeps a lockfile out of the diff reviewer, which
+# excludes anything `identify` recognises. That matters more than the warning:
+# an unrecognised lockfile is sent to the model as if it were source, and a
+# regenerated one is large enough on its own to blow `max_diff_bytes` and cost
+# the commit its entire code review.
 UNPARSED_LOCKFILES: dict[str, Ecosystem] = {
     "yarn.lock": Ecosystem.NPM,
     "pnpm-lock.yaml": Ecosystem.NPM,
     "poetry.lock": Ecosystem.PYPI,
     "Pipfile.lock": Ecosystem.PYPI,
+    "uv.lock": Ecosystem.PYPI,
     "packages.lock.json": Ecosystem.NUGET,
 }
 

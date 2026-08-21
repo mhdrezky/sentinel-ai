@@ -88,6 +88,21 @@ class TestStagedDiff:
         assert sorted(staged.excluded) == ["package-lock.json", "package.json"]
         assert "left-pad" not in staged.text
 
+    def test_uv_lock_does_not_consume_the_diff_budget(self, repo: Path):
+        """A regenerated `uv.lock` runs to six figures of bytes.
+
+        While it went unrecognised it reached the model as if it were source,
+        and one lock refresh was enough to push the diff past `max_diff_bytes`
+        — costing the commit the review of the code changed alongside it.
+        """
+        stage(repo, "src/app.py", "value = 1\n")
+        stage(repo, "uv.lock", 'version = 1\n[[package]]\nname = "x"\n' * 5_000)
+
+        staged = collect(repo)
+        assert staged.files == ["src/app.py"]
+        assert staged.excluded == ["uv.lock"]
+        assert staged.size_bytes < DiffReviewConfig().max_diff_bytes
+
     def test_manifest_only_change_is_empty(self, repo: Path):
         stage(repo, "package.json", '{"name": "app"}\n')
         assert collect(repo).is_empty
