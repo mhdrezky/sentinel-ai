@@ -548,11 +548,16 @@ class TestBudgetIsolation:
         assert not hasattr(settings.ai, "max_output_tokens")
         assert not hasattr(settings.ai, "timeout_seconds")
 
-    def test_ai_enabled_is_the_master_switch(self):
-        """Turning off `[ai]` must silence every AI stage, not just some."""
+    def test_ai_enabled_is_the_master_switch(self, repo: Path):
+        """Turning off `[ai]` must silence every AI stage, not just some.
+
+        Takes a tmp repo deliberately: `review_staged` appends to the trial log
+        in the given repository, and `Path(".")` wrote those lines into whatever
+        checkout pytest happened to run from.
+        """
         settings = _settings()
         settings.ai.enabled = False
-        outcome = review_staged(Path("."), settings, staged=StagedDiff(text="x"))
+        outcome = review_staged(repo, settings, staged=StagedDiff(text="x"))
         assert outcome.skipped is SkipReason.DISABLED
 
     def test_bundled_toml_populates_the_section(self):

@@ -21,6 +21,8 @@ def host_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (data_dir / "bin" / "trivy").write_text("", encoding="utf-8")
     monkeypatch.setattr("sentinel_ai.uninstall.host_data_dir", lambda: data_dir)
     monkeypatch.setattr("sentinel_ai.config.host_data_dir", lambda: data_dir)
+    # `run_uninstall` clears the global hook, so the real git config is off limits.
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     return data_dir
 
 
@@ -108,7 +110,6 @@ class TestGlobalHookCleanup:
         monkeypatch.setattr(
             "sentinel_ai.config.host_data_dir", lambda: home / ".sentinel-ai"
         )
-        monkeypatch.setattr(globalhook, "host_data_dir", lambda: home / ".sentinel-ai")
         monkeypatch.setattr(
             "sentinel_ai.uninstall.host_data_dir", lambda: home / ".sentinel-ai"
         )

@@ -37,7 +37,6 @@ def machine(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home.mkdir()
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "gitconfig"))
     monkeypatch.setattr("sentinel_ai.config.host_data_dir", lambda: home / ".sentinel-ai")
-    monkeypatch.setattr(globalhook, "host_data_dir", lambda: home / ".sentinel-ai")
     return home
 
 

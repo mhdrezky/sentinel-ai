@@ -22,8 +22,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import gitdiff
-from .config import host_data_dir
+from . import config, gitdiff
 
 HOOKS_PATH_KEY = "core.hooksPath"
 _MARKER = "# sentinel-ai:orgs="
@@ -36,7 +35,9 @@ class GlobalHookError(RuntimeError):
 
 
 def hooks_dir() -> Path:
-    return host_data_dir() / "hooks"
+    # Via the module, not a by-name import: this is the only handle tests have
+    # on where the hook lives, and getting it wrong deletes a real developer's.
+    return config.host_data_dir() / "hooks"
 
 
 def hook_path() -> Path:
