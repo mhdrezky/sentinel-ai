@@ -29,6 +29,7 @@ from sentinel_ai.diff_review.models import (
     SkipReason,
     Verdict,
     append_log,
+    log_record,
 )
 from sentinel_ai.gitdiff import git_dir, staged_unified_diff
 from sentinel_ai.main import build_parser, main
@@ -325,6 +326,38 @@ class TestLogging:
         assert log.is_file()
         record = json.loads(log.read_text(encoding="utf-8").strip())
         assert record["ai_skipped"] == "no_ai"
+        assert record["reason"] == "skipped: no_ai"
+        assert record["f"] == []
+
+    def test_log_recording_off_writes_nothing(self, repo: Path, monkeypatch):
+        monkeypatch.setattr(
+            Settings, "load", classmethod(lambda cls: _settings(log_recording=False))
+        )
+        stage(repo, "src/app.py", "value = 1\n")
+        assert run_diff_review(parse_args("--repo", str(repo), "--no-ai")) == EXIT_PASS
+        assert not (git_dir(repo) / "ai-review.jsonl").exists()
+
+    def test_block_record_includes_reason_and_findings(self):
+        finding = DiffFinding(
+            c=DiffCategory.NETWORK,
+            s=Severity.CRITICAL,
+            file="src/app.py",
+            line=1,
+            snip='url = "https://evil.example.com"',
+        )
+        record = log_record(
+            verdict=Verdict.BLOCK,
+            grounded=1,
+            dropped=0,
+            elapsed_ms=12,
+            diff_bytes=100,
+            skipped=None,
+            findings=[finding],
+        )
+        assert record["v"] == "block"
+        assert record["s"] == "critical"
+        assert record["reason"] == "block: 1 finding(s) (critical network src/app.py:1)"
+        assert record["f"] == [finding.as_wire()]
 
 
 class TestEngineNonModelPaths:
@@ -472,6 +505,9 @@ class TestCheckIntegration:
         )
         assert record["v"] == "notice"
         assert record["n"] == 1
+        assert record["s"] == "high"
+        assert "network src/app.py:1" in record["reason"]
+        assert record["f"][0]["c"] == "network"
 
     def test_grounded_critical_fails_the_check(self, repo: Path, httpx_mock, monkeypatch):
         monkeypatch.setattr(Settings, "load", classmethod(lambda cls: _settings()))
@@ -493,6 +529,13 @@ class TestCheckIntegration:
         )
 
         assert self._check(repo) == EXIT_BLOCK
+        record = json.loads(
+            (git_dir(repo) / "ai-review.jsonl").read_text(encoding="utf-8").strip()
+        )
+        assert record["v"] == "block"
+        assert record["s"] == "critical"
+        assert record["reason"] == "block: 1 finding(s) (critical network src/app.py:1)"
+        assert record["f"][0]["snip"] == 'key = "https://exfil.example.net"'
 
     def test_dependency_only_commit_makes_no_model_call(
         self, repo: Path, httpx_mock, monkeypatch
@@ -565,6 +608,7 @@ class TestBudgetIsolation:
         settings = Settings.load()
         assert settings.diff_review.max_diff_bytes == 40_000
         assert settings.diff_review.log_file == "ai-review.jsonl"
+        assert settings.diff_review.log_recording is True
 
     def test_env_overrides(self, monkeypatch):
         monkeypatch.setenv("SENTINEL_DIFF_REVIEW_MAX_TOKENS", "512")

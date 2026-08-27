@@ -78,7 +78,8 @@ class DiffReviewConfig(BaseModel):
     """Diffs above this skip the model entirely — truncating would hide findings."""
     log_file: str = "ai-review.jsonl"
     """Resolved against the repository's git directory, not `repo_root / .git`."""
-    log_findings: bool = False
+    log_recording: bool = True
+    """When false, skip writing to `log_file` entirely."""
 
 
 class HookConfig(BaseModel):

@@ -78,6 +78,30 @@ def append_log(path: Path, record: dict) -> None:
         return
 
 
+def _log_reason(
+    verdict: Verdict,
+    skipped: SkipReason | None,
+    findings: list[DiffFinding],
+) -> str:
+    """One-line explanation for a trial-log row. Always written."""
+    if skipped is not None:
+        suffix = " (strict)" if verdict is Verdict.BLOCK else ""
+        return f"skipped: {skipped.value}{suffix}"
+    if not findings:
+        return "pass"
+    parts = [
+        f"{finding.severity.value} {finding.category.value} {finding.file}:{finding.line}"
+        for finding in findings
+    ]
+    return f"{verdict.value}: {len(findings)} finding(s) ({', '.join(parts)})"
+
+
+def _top_severity(findings: list[DiffFinding]) -> str | None:
+    if not findings:
+        return None
+    return max(findings, key=lambda finding: finding.severity.rank).severity.value
+
+
 def log_record(
     *,
     verdict: Verdict,
@@ -88,16 +112,21 @@ def log_record(
     skipped: SkipReason | None,
     findings: list[DiffFinding] | None = None,
 ) -> dict:
-    """The one line a run contributes to the trial log."""
-    record: dict = {
+    """The one line a run contributes to the trial log.
+
+    A complete record: verdict, reason, severity, and grounded findings.
+    `log_recording` is the on/off switch for writing this line at all.
+    """
+    findings = findings or []
+    return {
         "ts": datetime.now(UTC).isoformat(timespec="seconds"),
         "v": verdict.value,
+        "reason": _log_reason(verdict, skipped, findings),
+        "s": _top_severity(findings),
         "n": grounded,
         "drop": dropped,
         "ms": elapsed_ms,
         "bytes": diff_bytes,
         "ai_skipped": skipped.value if skipped else None,
+        "f": [finding.as_wire() for finding in findings],
     }
-    if findings is not None:
-        record["f"] = [finding.as_wire() for finding in findings]
-    return record

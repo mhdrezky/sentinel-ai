@@ -77,6 +77,17 @@ class TestTrivyTranslation:
         )
         assert [f.package for f in findings] == ["npm:axios@1.0.0"]
 
+    def test_no_dependency_change_reports_nothing(self):
+        """The case the filter used to invert.
+
+        A commit that touches a manifest without changing any dependency — a
+        script edit, a removed dev tool — produced an empty change set, and the
+        guard read that as "no filter" rather than "nothing to report". A real
+        repo answered a two-line package.json edit with 47 findings across 21
+        packages and refused the commit.
+        """
+        assert _findings_from_trivy(report(vuln("axios"), vuln("moment")), []) == []
+
     def test_package_name_matching_is_case_insensitive(self):
         findings = _findings_from_trivy(
             report(vuln("Newtonsoft.Json")), [change("newtonsoft.json")]

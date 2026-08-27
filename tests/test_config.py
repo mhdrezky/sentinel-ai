@@ -172,3 +172,18 @@ def test_open_host_config_in_editor_uses_editor_on_linux(
 
     assert path == host_config
     assert calls == [["vim", str(host_config)]]
+
+
+def test_legacy_log_findings_key_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, no_host_config: None
+) -> None:
+    """Older host copies still have `log_findings`; it must not disable recording."""
+    host_config = tmp_path / ".sentinel-ai" / "config.toml"
+    host_config.parent.mkdir(parents=True)
+    host_config.write_text("[diff_review]\nlog_findings = false\n", encoding="utf-8")
+    monkeypatch.setattr("sentinel_ai.config.host_config_path", lambda: host_config)
+
+    settings = Settings.load()
+
+    assert settings.diff_review.log_recording is True
+    assert not hasattr(settings.diff_review, "log_findings")

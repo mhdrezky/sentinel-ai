@@ -47,7 +47,7 @@ max_diff_bytes = 40_000
 
 # Appended inside the repository's git directory
 log_file = "ai-review.jsonl"
-log_findings = false
+log_recording = true
 
 [hook]
 # Used by `sentinel-ai install-global-hook`, which sets git's global

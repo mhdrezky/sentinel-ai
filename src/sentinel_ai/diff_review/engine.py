@@ -80,18 +80,19 @@ def review_staged(
             diff_bytes=staged.size_bytes,
             skipped=skipped,
         )
-        append_log(
-            git_dir(root) / config.log_file,
-            log_record(
-                verdict=outcome.verdict,
-                grounded=len(outcome.findings),
-                dropped=outcome.dropped,
-                elapsed_ms=outcome.elapsed_ms,
-                diff_bytes=outcome.diff_bytes,
-                skipped=outcome.skipped,
-                findings=outcome.findings if config.log_findings else None,
-            ),
-        )
+        if config.log_recording:
+            append_log(
+                git_dir(root) / config.log_file,
+                log_record(
+                    verdict=outcome.verdict,
+                    grounded=len(outcome.findings),
+                    dropped=outcome.dropped,
+                    elapsed_ms=outcome.elapsed_ms,
+                    diff_bytes=outcome.diff_bytes,
+                    skipped=outcome.skipped,
+                    findings=outcome.findings,
+                ),
+            )
         return outcome
 
     if not config.enabled or not settings.ai.enabled:

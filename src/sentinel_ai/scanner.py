@@ -252,7 +252,11 @@ def _findings_from_trivy(report: dict, changes: list[PackageChange]) -> list[Fin
             if not package_name:
                 continue
             key_name = package_name.lower()
-            if changed_names and key_name not in changed_names:
+            # No `changed_names and ...` guard: an empty set means this commit
+            # changed no dependencies, and the answer then is no findings, not
+            # every inherited CVE in the tree. `--all` is unaffected — it treats
+            # the whole manifest as newly added, so the set is never empty there.
+            if key_name not in changed_names:
                 continue
 
             vuln_id = str(vulnerability.get("VulnerabilityID", "UNKNOWN"))
