@@ -1,5 +1,7 @@
 # Sentinel-AI
 
+[![Release](https://github.com/mhdrezky/sentinel-ai/actions/workflows/release.yml/badge.svg)](https://github.com/mhdrezky/sentinel-ai/actions/workflows/release.yml)
+
 Local supply-chain guard. It sits in a `pre-commit` hook and blocks malicious,
 typo-squatted, unpinned, or vulnerable dependencies before they enter a commit —
 whether a human or an autonomous coding agent added them.
@@ -16,18 +18,21 @@ Exit code `0` lets the commit through, `1` blocks it.
 
 ## How it works
 
-The pipeline is four decoupled stages. Each one only knows about the shared
-types in `models.py`.
+Two paths run from the staged index. The dependency path is four decoupled
+stages; each one only knows about the shared types in `models.py`. The code
+path is a grounded AI review of that same index.
 
 ```
-staged index ──▶ manifests ──▶ scanner ──▶ decision engine ──▶ exit code
-   gitdiff.py    manifests.py  scanner.py   decision_engine.py
-                               heuristics.py
-                               + trivy          ▲
-                                                │
-                                    ai/ ────────┘
-                              (on-prem model, gated)
+staged index ─┬─ manifest diff ──▶ scanner ──▶ decision engine ──▶ exit 0|1
+              │  gitdiff.py        scanner.py      decision_engine.py
+              │  manifests.py      heuristics.py
+              │                    + trivy
+              │
+              └─ code diff ──────▶ grounded AI review (network, watermark)
+                                   diff_review/
 ```
+
+The dependency path:
 
 1. **`gitdiff.py`** reads the *staged* blob and the `HEAD` blob for each changed
    file. Reading the index rather than the worktree means editing a file after
@@ -38,11 +43,15 @@ staged index ──▶ manifests ──▶ scanner ──▶ decision engine ─
    people to reach for `--no-verify`.
 3. **`scanner.py`** gathers evidence: offline heuristics plus Trivy for CVEs.
    It never decides anything.
-4. **`ai/`** sends the ambiguous cases to the on-prem model server for a
-   contextual verdict. It only runs when the deterministic layer found
-   something or a new direct dependency appeared — inference is the slowest
-   stage and should stay off the hot path.
-5. **`decision_engine.py`** applies policy and produces the exit code.
+4. **`decision_engine.py`** applies policy and produces the exit code.
+
+The code path (`diff_review/`) is independent of that chain. It reviews the
+staged **code** diff with the on-prem model — new outbound URLs, and AI
+attribution left in the source. Manifests and lockfiles are stripped out of
+what the model sees; dependencies are not sent to it. Inference stays off the
+hot path when the remaining diff is empty. `check --all` and `check --range`
+skip this path: they answer a different question, and this layer only reads
+the index.
 
 ### What the offline layer catches
 
@@ -191,9 +200,10 @@ sentinel-ai doctor
 sentinel-ai config
 ```
 
-`doctor` should show `ai:` in green with your `base_url`. The AI stage runs
-automatically on pre-commit when heuristic or Trivy findings need contextual
-review, or when new direct dependencies are added (unless you pass `--no-ai`).
+`doctor` should show `ai:` in green with your `base_url`. The AI stage reviews
+the staged code diff automatically on pre-commit when `[diff_review]` and `[ai]`
+are enabled (unless you pass `--no-ai`). A dependency-only commit with an empty
+code diff does not call the model.
 
 If the model server is down, commits still proceed by default (`fail_open = true`)
 with a warning — deterministic checks still run.
@@ -385,13 +395,13 @@ The defaults keep a broken dependency out, but do not let Sentinel-AI's own
 problems freeze the team:
 
 * **Model server unreachable** → warn, keep the deterministic findings, allow the
-  commit (`diff_review.fail_open = true`).
-* **Trivy missing** → warn, skip CVE checks, continue.
-* **Internal error** → warn loudly that dependencies were *not* verified,
-  allow the commit.
-
-`--strict` (or `diff_review.fail_open = false`) inverts all three for environments
-where an unverified commit is the worse outcome.
+  commit (`diff_review.fail_open = true`). `--strict` or `fail_open = false`
+  blocks instead.
+* **Trivy missing or failing** → warn, skip CVE checks, continue. Neither
+  `--strict` nor `fail_open` changes this.
+* **Internal error in the dependency scanner** → warn loudly that dependencies
+  were *not* verified, allow the commit. `--strict` blocks; `fail_open` does
+  not apply here.
 
 Findings carry text from CVE advisories and from the model, so the report is
 transliterated to ASCII on consoles that cannot encode it, and untrusted detail
@@ -425,13 +435,56 @@ The AI stage talks to any server that exposes an OpenAI-compatible
 OpenAI-compatible gateway. Point `base_url` and `model` at your deployment;
 no vendor-specific integration is required.
 
-The system prompt tells the model that everything inside `<evidence>` is
-untrusted data, not instruction. A package can put text in its own description
-or install script addressed at an LLM reviewer; the prompt treats such text as a
-malicious indicator in its own right.
+The system prompt tells the model that everything inside the nonce-tagged
+`<diff>` region is untrusted data, not instruction. A commit can put text in
+the diff addressed at an LLM reviewer; the prompt treats that text as content
+to inspect, not as instruction to follow.
 
-A verdict below 0.5 confidence is demoted one severity step. The model advises;
-it should not be the sole reason a developer's commit fails.
+The model's own `v` field is ignored. A finding whose snippet cannot be found
+in an added line is dropped. Only a grounded `critical` finding blocks; the
+rest are recorded as notices. The model proposes; the diff decides.
+
+## Engineering decisions
+
+Each entry is the constraint, the choice, and the trade-off accepted.
+
+### Installers are validated in CI, not executed
+
+The installers ship verbatim as release assets. A syntax error in `install.sh`
+or `install.ps1` reaches users as a broken one-liner they paste into a shell.
+The release workflow therefore parses them on every run (push to `main`, a
+`v*` tag, or a manual dispatch) before a tag can publish: `bash -n` for the
+shell script, and the PowerShell AST parser for `install.ps1`. Installer
+upload happens only on a tag push. Nothing else executes them before a user
+does — a parse-only gate, not a dry-run against a real machine.
+
+### Only new dependencies are scanned
+
+The hook diffs `HEAD` against the staged index and scans what this commit
+introduces. Scanning the whole tree would dump a wall of inherited CVEs onto
+every commit and train people to reach for `--no-verify`. The trade-off is
+accepted in the open: pre-existing vulnerabilities are not the hook's job.
+
+### The staged index is read, not the worktree
+
+Git commits the index, not the files on disk. Reading staged blobs against
+`HEAD` means editing a file after `git add` cannot smuggle a package past the
+check. Unstaged edits are invisible here — the same contract git itself has.
+
+### Fail-open by default
+
+A model server outage, a missing Trivy binary, or an internal error warns and
+lets the commit through rather than freezing the team. Deterministic checks
+still run. `--strict` inverts the model-server and scanner-bug cases, where an
+unverified commit is the worse outcome. `fail_open = false` only inverts an
+unreachable model server. A missing Trivy binary never blocks.
+
+### Prompt injection is content, not instruction
+
+Everything sent to the model is untrusted data. The staged diff is wrapped in a
+nonce-tagged `<diff>` delimiter so a forged closing tag cannot end the untrusted
+region and address the model as itself. The system prompt tells the reviewer
+that text addressed at it is content to inspect, not instruction to follow.
 
 ## Development
 
