@@ -1,6 +1,7 @@
 # Sentinel-AI
 
-[![Release](https://github.com/mhdrezky/sentinel-ai/actions/workflows/release.yml/badge.svg)](https://github.com/mhdrezky/sentinel-ai/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/mhdrezky/sentinel-ai)](https://github.com/mhdrezky/sentinel-ai/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/mhdrezky/sentinel-ai/release.yml?branch=main&label=CI)](https://github.com/mhdrezky/sentinel-ai/actions/workflows/release.yml)
 
 Local supply-chain guard. It sits in a `pre-commit` hook and blocks malicious,
 typo-squatted, unpinned, or vulnerable dependencies before they enter a commit —
